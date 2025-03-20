@@ -1,25 +1,42 @@
-import logo from './logo.svg';
-import './App.css';
+import React from "react";
+import { Routes, Route } from "react-router-dom";
+import AdminDashboard from "./components/admin/AdminPanel";
+import CreateUser from "./components/admin/CreateUser";
+import EditUser from "./components/admin/EditUser";
+import CreateCategories from "./components/admin/CreateCategories";
+import CreateGrades from "./components/admin/CreateGrades";
+import AddSubjects from "./components/admin/AddSubjects";
+import AdminCreateBook from "./components/admin/AdminCreateBook";
+import ViewQuestions from "./components/admin/ViewQuestions";
+import Login from "./components/Login";
+import ProfileScreen from "./components/ProfileScreen";
+import TeacherPanel from "./components/teacher/TeacherPanel";
+import QuestionBank from "./components/teacher/QuestionBank";
+import GenerateQuiz from "./components/teacher/GenerateQuiz";
+import ViewEditBook from "./components/teacher/ViewEditBook";
 
-function App() {
+const App = () => {
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
+    <Routes default>
+      <Route path="/" element={<Login />} />
+      <Route path="/admin" element={<AdminDashboard />} />
+      <Route path="/teacher" element={<TeacherPanel />} />
+      <Route path="/create-user" element={<CreateUser />} />
+      <Route path="/edit-user" element={<EditUser />} />
+      <Route path="/create-categories" element={<CreateCategories />} />
+      <Route path="/create-grades" element={<CreateGrades />} />
+      <Route path="/add-subjects" element={<AddSubjects />} />
+      <Route path="/admin/create-book" element={<AdminCreateBook />} />
+      <Route path="/view-questions" element={<ViewQuestions />} />
+      <Route path="/profile" element={<ProfileScreen />} />
+
+      {/* Teacher routes */}
+      <Route path="/teacher" element={<TeacherPanel />} />
+      <Route path="/teacher/question-bank" element={<QuestionBank />} />
+      <Route path="/teacher/generate-quiz" element={<GenerateQuiz />} />
+      <Route path="/teacher/view-books" element={<ViewEditBook />} />
+    </Routes>
   );
-}
+};
 
 export default App;
