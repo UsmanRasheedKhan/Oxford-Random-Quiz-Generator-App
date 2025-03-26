@@ -93,13 +93,13 @@ const AdminPanel = () => {
       icon: <CreateUserIcon />,
       description: "Add new users to the system with specific roles and permissions"
     },
-    { 
-      id: "edit-user", 
-      name: "Edit User", 
-      route: "/edit-user",
-      icon: <EditUserIcon />,
-      description: "Modify existing user details, roles, and permissions"
-    },
+    // { 
+    //   id: "edit-user", 
+    //   name: "Edit User", 
+    //   route: "/edit-user",
+    //   icon: <EditUserIcon />,
+    //   description: "Modify existing user details, roles, and permissions"
+    // },
     // Add the new User Accounts tile here
     { 
       id: "user-accounts", 
