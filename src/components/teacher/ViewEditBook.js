@@ -331,7 +331,10 @@ const ViewEditBook = () => {
                 "questions"
               );
               
-              const questionsSnapshot = await getDocs(questionsRef);
+              // Filter to only get approved questions
+              const questionsSnapshot = await getDocs(
+                query(questionsRef, where('status', '==', 'approved'))
+              );
               
               // Map questions
               const questionsData = questionsSnapshot.docs.map(questionDoc => ({

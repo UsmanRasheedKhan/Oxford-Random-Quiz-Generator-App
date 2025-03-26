@@ -34,7 +34,9 @@ import {
   Card,
   CardHeader,
   CardContent,
-  Grid
+  Grid,
+  Chip,
+  Checkbox
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import { 
@@ -48,7 +50,7 @@ import {
   QuestionAnswer as QuestionIcon,
   School as SchoolIcon
 } from "@mui/icons-material";
-import { collection, query, where, getDocs, doc, getDoc, updateDoc, deleteDoc, addDoc } from "firebase/firestore";
+import { collection, query, where, getDocs, doc, getDoc, updateDoc, deleteDoc, addDoc, writeBatch } from "firebase/firestore";
 import { db, auth } from "../../firebase"; // Adjust path as needed
 
 const QuestionBank = () => {
@@ -87,6 +89,15 @@ const QuestionBank = () => {
   // Update state to track user's assigned departments and grades
   const [userAssignedDepartments, setUserAssignedDepartments] = useState([]);
   const [userAssignedGrades, setUserAssignedGrades] = useState({});
+
+  // Add state variables for filtering
+  const [showPendingQuestions, setShowPendingQuestions] = useState(true);
+
+  // Add state variables for bulk upload
+  const [bulkUploadDialog, setBulkUploadDialog] = useState(false);
+  const [bulkUploadFile, setBulkUploadFile] = useState(null);
+  const [bulkUploadQuestions, setBulkUploadQuestions] = useState([]);
+  const [bulkUploadError, setBulkUploadError] = useState("");
 
   // Load user and their departments
   useEffect(() => {
@@ -270,7 +281,8 @@ const fetchBooks = async (department, grade) => {
   }
 };
 
-// Load book structure from the hierarchical database
+// Update the loadBookStructure function to properly filter questions based on status
+
 const loadBookStructure = async (bookId) => {
   try {
     setLoading(true);
@@ -320,20 +332,41 @@ const loadBookStructure = async (bookId) => {
               ...topicDoc.data()
             };
             
-            // Get questions for this topic - FIXED: Create proper collection reference
+            // Get questions for this topic
             const questionsRef = collection(db, "books", selectedDepartment, "grades", formattedGrade, "books", bookId, "chapters", chapterId, "topics", topicId, "questions");
             const questionsSnapshot = await getDocs(questionsRef);
             
-            const questionsData = questionsSnapshot.docs.map(questionDoc => ({
+            // Process questions and separate by status
+            const allQuestionsData = questionsSnapshot.docs.map(questionDoc => ({
               id: questionDoc.id,
               ...questionDoc.data()
             }));
+            
+            // Sort questions by status and creation date
+            const sortedQuestions = allQuestionsData.sort((a, b) => {
+              // Sort by status (approved first, then pending)
+              if ((a.status === 'approved' && b.status !== 'approved') || 
+                  (!a.status && b.status === 'pending')) {
+                return -1;
+              }
+              if ((b.status === 'approved' && a.status !== 'approved') || 
+                  (!b.status && a.status === 'pending')) {
+                return 1;
+              }
+              
+              // Then sort by creation date (newest first)
+              const dateA = a.createdAt ? new Date(a.createdAt.seconds * 1000) : new Date(0);
+              const dateB = b.createdAt ? new Date(b.createdAt.seconds * 1000) : new Date(0);
+              return dateB - dateA;
+            });
             
             return {
               id: topicId,
               name: topicData.name,
               order: topicData.order || 0,
-              questions: questionsData
+              questions: sortedQuestions,
+              // Also store a filtered version with only approved questions
+              approvedQuestions: sortedQuestions.filter(q => q.status === 'approved')
             };
           })
         );
@@ -474,7 +507,7 @@ const saveQuestion = async () => {
     const { chapterId, topicId } = editingQuestion;
     const formattedGrade = selectedGrade.replace(" ", "_");
     
-    // Prepare question data with author name
+    // Prepare question data with author name and pending status
     const questionData = {
       text: newQuestion.text.trim(),
       type: newQuestion.type,
@@ -487,12 +520,12 @@ const saveQuestion = async () => {
         isTrueAnswer: newQuestion.isTrueAnswer
       }),
       author: currentUser.email,
-      createdAt: new Date()
+      createdAt: new Date(),
+      status: "pending" // Add pending status for new questions
     };
     
-    // Rest of the function remains the same...
     if (isNewQuestion) {
-      // Add new question path is already correct
+      // Add new question
       await addDoc(
         collection(
           db, 
@@ -506,19 +539,25 @@ const saveQuestion = async () => {
           chapterId,
           "topics",
           topicId,
-          "questions"  // This matches the required structure
+          "questions"
         ),
         questionData
       );
       
       setToast({
         open: true,
-        message: "Question added successfully",
+        message: "Question submitted for approval. It won't be visible until approved by an administrator.",
         severity: "success"
       });
     } else {
+      // For existing questions, preserve the current status unless we're explicitly changing it
+      if (!editingQuestion.question.status) {
+        questionData.status = "pending";
+      } else {
+        questionData.status = editingQuestion.question.status;
+      }
+      
       // Update existing question
-      // Path is already correct
       await updateDoc(
         doc(
           db, 
@@ -540,7 +579,9 @@ const saveQuestion = async () => {
       
       setToast({
         open: true,
-        message: "Question updated successfully",
+        message: editingQuestion.question.status === "approved" 
+          ? "Question updated successfully" 
+          : "Question updated and sent for approval",
         severity: "success"
       });
     }
@@ -600,6 +641,133 @@ const handleDeleteQuestion = async (questionId, chapterId, topicId) => {
     });
   }
 };
+
+  // Handle bulk upload
+  const handleBulkUpload = (chapterId, topicId) => {
+    setEditingQuestion({ chapterId, topicId });
+    setBulkUploadDialog(true);
+  };
+
+  // Handle file change for bulk upload
+  const handleFileChange = (e) => {
+    setBulkUploadFile(e.target.files[0]);
+  };
+
+  // Parse CSV file for bulk upload
+const parseCSVFile = async () => {
+  if (!bulkUploadFile) {
+    setBulkUploadError("Please select a file to upload.");
+    return;
+  }
+
+  try {
+    const fileContent = await bulkUploadFile.text();
+    const rows = fileContent.split("\n").map((row) => row.split(","));
+
+    // Validate the header row
+    const headers = rows[0];
+    const expectedHeaders = [
+      "Question Text",
+      "Type",
+      "Option 1",
+      "Option 2",
+      "Option 3",
+      "Option 4",
+      "Correct Option Index",
+      "Short Answer",
+      "True/False Answer",
+    ];
+    if (!headers || headers.length < expectedHeaders.length || !headers.every((header, index) => header.trim() === expectedHeaders[index])) {
+      setBulkUploadError("Invalid CSV format. Please ensure the headers match the required format.");
+      return;
+    }
+
+    // Skip the header row and parse the questions
+    const parsedQuestions = rows.slice(1).map((row) => ({
+      text: row[0]?.trim(),
+      type: row[1]?.trim(),
+      options: row.slice(2, 6).map((opt) => opt?.trim()), // Assuming 4 options for multiple-choice
+      correctOption: parseInt(row[6]?.trim(), 10), // Index of the correct option
+      shortAnswer: row[7]?.trim(), // For short answer questions
+      isTrueAnswer: row[8]?.trim()?.toLowerCase() === "true", // For true/false questions
+    }));
+
+    // Filter out empty rows
+    const validQuestions = parsedQuestions.filter((question) => question.text);
+
+    setBulkUploadQuestions(validQuestions);
+    setBulkUploadError("");
+  } catch (error) {
+    console.error("Error parsing CSV file:", error);
+    setBulkUploadError("Failed to parse the file. Please ensure it is in the correct format.");
+  }
+};
+
+  // Save bulk questions to the appropriate topic in the book structure
+  const saveBulkQuestions = async () => {
+    try {
+      const { chapterId, topicId } = editingQuestion;
+      const formattedGrade = selectedGrade.replace(" ", "_");
+
+      // Initialize a Firestore batch
+      const batch = writeBatch(db);
+
+      const questionsRef = collection(
+        db,
+        "books",
+        selectedDepartment,
+        "grades",
+        formattedGrade,
+        "books",
+        selectedBook,
+        "chapters",
+        chapterId,
+        "topics",
+        topicId,
+        "questions"
+      );
+
+      bulkUploadQuestions.forEach((question) => {
+        const questionData = {
+          text: question.text,
+          type: question.type,
+          ...(question.type === "multiple" ? {
+            options: question.options,
+            correctOption: question.correctOption,
+          } : question.type === "short" ? {
+            shortAnswer: question.shortAnswer,
+          } : {
+            isTrueAnswer: question.isTrueAnswer,
+          }),
+          author: currentUser.email,
+          createdAt: new Date(),
+          status: "pending", // Add pending status for new questions
+        };
+
+        const newDocRef = doc(questionsRef); // Create a new document reference
+        batch.set(newDocRef, questionData); // Add the document to the batch
+      });
+
+      // Commit the batch
+      await batch.commit();
+
+      setToast({
+        open: true,
+        message: "Questions uploaded successfully and sent for approval.",
+        severity: "success",
+      });
+
+      setBulkUploadDialog(false);
+      await loadBookStructure(selectedBook); // Refresh the book structure
+    } catch (error) {
+      console.error("Error saving bulk questions:", error);
+      setToast({
+        open: true,
+        message: "Failed to upload questions: " + error.message,
+        severity: "error",
+      });
+    }
+  };
 
   // Handle closing the toast
   const handleCloseToast = () => {
@@ -726,7 +894,7 @@ const handleDeleteQuestion = async (questionId, chapterId, topicId) => {
                 <BookIcon sx={{ mr: 1 }} /> {bookStructure.name}
               </Typography>
               
-              <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+              <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mb: 1 }}>
                 <Typography variant="body1">
                   <strong>Department:</strong> {bookStructure.department}
                 </Typography>
@@ -734,7 +902,52 @@ const handleDeleteQuestion = async (questionId, chapterId, topicId) => {
                   <strong>Grade:</strong> {bookStructure.grade}
                 </Typography>
               </Box>
+              
+              <Divider sx={{ my: 2 }} />
+              
+              {/* Filter options */}
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                <Typography variant="subtitle2" sx={{ mr: 2 }}>Filter:</Typography>
+                <FormControlLabel
+                  control={
+                    <Checkbox 
+                      checked={showPendingQuestions}
+                      onChange={(e) => setShowPendingQuestions(e.target.checked)}
+                      color="warning"
+                    />
+                  }
+                  label="Show Pending Questions"
+                />
+              </Box>
             </Paper>
+            
+            {/* Approval status info */}
+            <Box sx={{ mb: 3 }}>
+              <Alert severity="info" sx={{ mb: 2 }}>
+                <Typography variant="body2">
+                  <strong>Note:</strong> New questions require admin approval before they can be used in quizzes.
+                  Questions with <Chip size="small" label="Pending Approval" color="warning" sx={{ mx: 1, height: 20 }} />
+                  status are awaiting administrator review.
+                </Typography>
+              </Alert>
+            </Box>
+
+            {/* Pending Questions Info */}
+            {/* <Box sx={{ mb: 3 }}>
+              <Alert severity="info" sx={{ mb: 2 }}>
+                <Typography variant="body2">
+                  <strong>Note:</strong> New questions require admin approval before they can be used in quizzes.
+                  Questions with <Chip size="small" label="Pending Approval" color="warning" sx={{ mx: 1, height: 20 }} />
+                  status are awaiting administrator review.
+                </Typography>
+              </Alert>
+              <Alert severity="warning">
+                <Typography variant="body2">
+                  <strong>Important:</strong> Students will not see pending questions in quizzes until they are approved by an administrator.
+                  You can still view and manage your pending questions here while waiting for approval.
+                </Typography>
+              </Alert>
+            </Box> */}
             
             {/* Chapters */}
             {bookStructure.chapters.length > 0 ? (
@@ -801,24 +1014,60 @@ const handleDeleteQuestion = async (questionId, chapterId, topicId) => {
                                 >
                                   Add Question
                                 </Button>
+                                <Button
+                                  variant="outlined"
+                                  size="small"
+                                  startIcon={<AddIcon />}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleBulkUpload(chapter.id, topic.id);
+                                  }}
+                                  sx={{ mr: 1 }}
+                                >
+                                  Bulk Upload
+                                </Button>
                               </ListItemButton>
                               
                               {/* Display questions if topic is selected */}
                               {selectedTopic === topic.id && (
                                 <Box sx={{ pl: 8, pr: 4, pb: 2, pt: 1 }}>
-                                  {topic.questions.length > 0 ? (
-                                    topic.questions.map((question, qIndex) => (
+                                  {topic.questions
+                                    .filter(q => showPendingQuestions ? true : (q.status !== 'pending'))
+                                    .map((question, qIndex) => (
                                       <Card 
                                         key={question.id} 
                                         sx={{ 
                                           mb: 2,
                                           border: '1px solid #e0e0e0',
-                                          boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                                          boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                                          borderLeft: question.status === 'pending' ? '4px solid #ff9800' : 
+                                                     question.status === 'approved' ? '4px solid #4caf50' : 
+                                                     '4px solid #e0e0e0'
                                         }}
                                       >
                                         <CardHeader
                                           avatar={<QuestionIcon sx={{ color: '#011E41' }} />}
-                                          title={`Question ${qIndex + 1}`}
+                                          title={
+                                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                              {`Question ${qIndex + 1}`}
+                                              {question.status === 'pending' && (
+                                                <Chip 
+                                                  label="Pending Approval" 
+                                                  size="small" 
+                                                  color="warning"
+                                                  sx={{ ml: 1, fontSize: '0.75rem' }}
+                                                />
+                                              )}
+                                              {question.status === 'approved' && (
+                                                <Chip 
+                                                  label="Approved" 
+                                                  size="small" 
+                                                  color="success"
+                                                  sx={{ ml: 1, fontSize: '0.75rem' }}
+                                                />
+                                              )}
+                                            </Box>
+                                          }
                                           subheader={question.type === "multiple" ? "Multiple Choice" : question.type === "short" ? "Short Answer" : "True/False"}
                                           action={
                                             <Box>
@@ -826,6 +1075,8 @@ const handleDeleteQuestion = async (questionId, chapterId, topicId) => {
                                                 onClick={() => handleEditQuestion(question, chapter.id, topic.id)}
                                                 size="small"
                                                 sx={{ color: '#4caf50' }}
+                                                disabled={question.status === 'pending'} // Disable editing for pending questions
+                                                title={question.status === 'pending' ? "Cannot edit pending questions" : "Edit question"}
                                               >
                                                 <EditIcon />
                                               </IconButton>
@@ -877,11 +1128,7 @@ const handleDeleteQuestion = async (questionId, chapterId, topicId) => {
                                         </CardContent>
                                       </Card>
                                     ))
-                                  ) : (
-                                    <Alert severity="info">
-                                      No questions added to this topic yet.
-                                    </Alert>
-                                  )}
+                                  }
                                 </Box>
                               )}
                             </React.Fragment>
@@ -914,6 +1161,13 @@ const handleDeleteQuestion = async (questionId, chapterId, topicId) => {
           {isNewQuestion ? "Add New Question" : "Edit Question"}
         </DialogTitle>
         <DialogContent>
+          {/* Add approval process notice */}
+          {isNewQuestion && (
+            <Alert severity="info" sx={{ mb: 3 }}>
+              New questions will be sent to administrators for review and approval before they appear in quizzes.
+            </Alert>
+          )}
+          
           <Box sx={{ mt: 1 }}>
             <TextField
               fullWidth
@@ -1015,7 +1269,60 @@ const handleDeleteQuestion = async (questionId, chapterId, topicId) => {
             variant="contained"
             sx={{ bgcolor: '#011E41' }}
           >
-            {isNewQuestion ? "Add Question" : "Save Changes"}
+            {isNewQuestion ? "Submit for Approval" : "Save Changes"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+      
+      {/* Bulk Upload Dialog */}
+      <Dialog
+        open={bulkUploadDialog}
+        onClose={() => setBulkUploadDialog(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Bulk Upload Questions</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ mb: 2 }}>
+            Upload a CSV file with the following format:
+          </Typography>
+          <Typography variant="body2" sx={{ mb: 2, fontStyle: "italic" }}>
+            Question Text, Type (multiple/short/truefalse), Option 1, Option 2, Option 3, Option 4, Correct Option Index (0-3), Short Answer, True/False Answer
+          </Typography>
+          <TextField
+            type="file"
+            inputProps={{ accept: ".csv" }}
+            fullWidth
+            onChange={handleFileChange}
+            sx={{ mb: 2 }}
+          />
+          {bulkUploadError && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {bulkUploadError}
+            </Alert>
+          )}
+          <Button
+            variant="outlined"
+            onClick={parseCSVFile}
+            sx={{ mb: 2 }}
+          >
+            Parse File
+          </Button>
+          {bulkUploadQuestions.length > 0 && (
+            <Alert severity="success" sx={{ mb: 2 }}>
+              {bulkUploadQuestions.length} questions parsed successfully.
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setBulkUploadDialog(false)}>Cancel</Button>
+          <Button
+            onClick={saveBulkQuestions}
+            variant="contained"
+            sx={{ bgcolor: "#011E41" }}
+            disabled={bulkUploadQuestions.length === 0}
+          >
+            Upload Questions
           </Button>
         </DialogActions>
       </Dialog>

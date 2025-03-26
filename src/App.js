@@ -14,6 +14,8 @@ import TeacherPanel from "./components/teacher/TeacherPanel";
 import QuestionBank from "./components/teacher/QuestionBank";
 import GenerateQuiz from "./components/teacher/GenerateQuiz";
 import ViewEditBook from "./components/teacher/ViewEditBook";
+import ApprovalRequests from "./components/admin/ApprovalRequests";
+import UserAccounts from "./components/admin/UserAccounts";
 
 const App = () => {
   return (
@@ -23,11 +25,13 @@ const App = () => {
       <Route path="/teacher" element={<TeacherPanel />} />
       <Route path="/create-user" element={<CreateUser />} />
       <Route path="/edit-user" element={<EditUser />} />
+      <Route path="/user-accounts" element={<UserAccounts />} />
       <Route path="/create-categories" element={<CreateCategories />} />
       <Route path="/create-grades" element={<CreateGrades />} />
       <Route path="/add-subjects" element={<AddSubjects />} />
       <Route path="/admin/create-book" element={<AdminCreateBook />} />
       <Route path="/view-questions" element={<ViewQuestions />} />
+      <Route path="/approval-requests" element={<ApprovalRequests />} />
       <Route path="/profile" element={<ProfileScreen />} />
 
       {/* Teacher routes */}
@@ -35,6 +39,7 @@ const App = () => {
       <Route path="/teacher/question-bank" element={<QuestionBank />} />
       <Route path="/teacher/generate-quiz" element={<GenerateQuiz />} />
       <Route path="/teacher/view-books" element={<ViewEditBook />} />
+
     </Routes>
   );
 };

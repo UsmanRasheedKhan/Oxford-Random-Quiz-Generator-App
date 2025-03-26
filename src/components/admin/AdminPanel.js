@@ -14,13 +14,15 @@ import {
 import { 
   PersonAdd as CreateUserIcon,
   Edit as EditUserIcon,
+  People as UserAccountsIcon,  // Add this new import
   Category as CategoryIcon,
   School as GradesIcon,
   BookmarkAdd as SubjectsIcon,
   MenuBook as CreateBookIcon,
   QuestionAnswer as QuestionsIcon,
   AccountCircle as ProfileIcon,
-  Logout as LogoutIcon
+  Logout as LogoutIcon,
+  AssignmentTurnedIn as AssignmentTurnedInIcon  // Add this new icon import
 } from "@mui/icons-material";
 import { styled } from "@mui/material/styles";
 import { signOut } from "firebase/auth";
@@ -98,6 +100,14 @@ const AdminPanel = () => {
       icon: <EditUserIcon />,
       description: "Modify existing user details, roles, and permissions"
     },
+    // Add the new User Accounts tile here
+    { 
+      id: "user-accounts", 
+      name: "User Accounts", 
+      route: "/user-accounts",
+      icon: <UserAccountsIcon />,
+      description: "View and manage all user accounts with filtering by role"
+    },
     { 
       id: "create-categories", 
       name: "Create Categories", 
@@ -132,6 +142,14 @@ const AdminPanel = () => {
       route: "/view-questions",
       icon: <QuestionsIcon />,
       description: "Browse and manage all questions in the system"
+    },
+    // Add the new Approval Requests tile here, before Profile
+    { 
+      id: "approval-requests", 
+      name: "Approval Requests", 
+      route: "/approval-requests",
+      icon: <AssignmentTurnedInIcon />,
+      description: "Review and manage teacher question approval requests"
     },
     { 
       id: "profile", 

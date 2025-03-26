@@ -58,3 +58,17 @@ input, select, button {
   padding: 10px;
   width: 200px;
 }
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #quiz-section, #quiz-section * {
+    visibility: visible;
+  }
+  #quiz-section {
+    position: absolute;
+    left: 0;
+    top: 0;
+  }
+}

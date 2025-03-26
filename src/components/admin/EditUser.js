@@ -1,902 +1,1370 @@
-import React, { useState } from "react";
-import { db, auth } from "../../firebase";
-import { doc, updateDoc, deleteDoc, query, where, getDocs, collection } from "firebase/firestore";
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
-  TextField,
-  Button,
-  Typography,
-  Box,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Container,
-  Paper,
-  Grid,
-  IconButton,
-  InputAdornment,
-  CircularProgress,
-  Divider,
-  Fade,
-  Alert,
-  Snackbar,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
-  Chip,
-  Card,
-  CardContent,
-  Avatar,
-  Tooltip,
-  RadioGroup,
-  Radio,
-  FormControlLabel
-} from "@mui/material";
+  Container, Paper, Typography, Box, TextField, Button, FormControl,
+  InputLabel, Select, MenuItem, Alert, CircularProgress,
+  Divider, IconButton, Grid, Chip, Checkbox, ListItemText, ListSubheader,
+  Card, CardContent, List, ListItem, ListItemIcon, ListItemText as MuiListItemText,
+  FormHelperText
+} from '@mui/material';
 import {
-  Search as SearchIcon,
-  Person as PersonIcon,
-  Email as EmailIcon,
-  AdminPanelSettings as AdminIcon,
-  School as TeacherIcon,
-  Edit as EditIcon,
-  Save as SaveIcon,
-  Delete as DeleteIcon,
-  LockReset as ResetIcon,
-  Category as DepartmentIcon,
-  MenuBook as SubjectIcon,
-  ArrowBack as BackIcon,
-  Warning as WarningIcon
-} from "@mui/icons-material";
-import { useNavigate } from "react-router-dom";
+  School as DepartmentIcon, MenuBook as GradeIcon, AutoStories as SubjectIcon,
+  Person as UserIcon, Email as EmailIcon, Badge as RoleIcon, ArrowBack as BackIcon
+} from '@mui/icons-material';
+import { db } from '../../firebase';
+import { doc, getDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
 
 const EditUser = () => {
-  const [searchType, setSearchType] = useState("email"); // "email" or "name"
-  const [searchQuery, setSearchQuery] = useState("");
-  const [role, setRole] = useState("Admin");
-  const [userData, setUserData] = useState(null);
-  const [isChanged, setIsChanged] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [searchLoading, setSearchLoading] = useState(false);
-  const [notification, setNotification] = useState({
-    open: false,
-    message: "",
-    severity: "success"
-  });
-  const [deleteDialog, setDeleteDialog] = useState(false);
-  const [resetDialog, setResetDialog] = useState(false);
-  const [searchResults, setSearchResults] = useState([]); // Store multiple search results
-  const [showSearchResults, setShowSearchResults] = useState(false); // Control search results display
-  
-  const loggedInUserEmail = auth.currentUser?.email;
   const navigate = useNavigate();
+  const location = useLocation();
+  const userData = location.state?.user;
+  
+  // Original user data for display purposes
+  const [originalUserData, setOriginalUserData] = useState({
+    name: '',
+    email: '',
+    role: '',
+    departments: [],
+    grades: [],
+    subjects: []
+  });
+  
+  // Form data for editing (starts with blank selections for dropdowns)
+  const [formData, setFormData] = useState({
+    name: '',
+    departments: [],
+    grades: [],
+    subjects: []
+  });
+  
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  
+  // Data for dropdowns
+  const [departments, setDepartments] = useState([]);
+  const [grades, setGrades] = useState([]);
+  const [subjects, setSubjects] = useState([]);
+  
+  // Loading states for dropdowns
+  const [departmentsLoading, setDepartmentsLoading] = useState(false);
+  const [gradesLoading, setGradesLoading] = useState(false);
+  const [subjectsLoading, setSubjectsLoading] = useState(false);
+  
+  // To keep track of the original data mappings
+  const [departmentNameMap, setDepartmentNameMap] = useState({});
+  const [gradeNameMap, setGradeNameMap] = useState({});
+  const [subjectNameMap, setSubjectNameMap] = useState({});
+  
+  // Utility function to normalize IDs for consistent comparison
+  const normalizeId = (id) => id ? String(id).trim() : '';
 
-  const getInitials = (name) => {
-    if (!name) return "?";
-    return name
-      .split(' ')
-      .map(word => word.charAt(0).toUpperCase())
-      .join('')
-      .slice(0, 2);
-  };
+  // Add a new state for raw user data directly from database
+  const [rawUserData, setRawUserData] = useState({
+    name: '',
+    email: '',
+    role: '',
+    department: [],  // Note: using 'department' singular as per your database
+    grades: [],
+    subjects: []
+  });
 
-  // Add email validation function
-  const isValidEmail = (email) => {
-    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-    return emailRegex.test(email);
-  };
-
-  const fetchUser = async () => {
-    // Clear any previous search results
-    setSearchResults([]);
-    setShowSearchResults(false);
-    
-    if (!searchQuery || !role) {
-      setNotification({
-        open: true,
-        message: `Please enter a valid ${searchType === "email" ? "email" : "name"} and select a role`,
-        severity: "error"
+  // At the beginning of your component, add this logging function
+  useEffect(() => {
+    // Debug logging
+    if (rawUserData) {
+      console.log("Raw user data loaded:", {
+        name: rawUserData.name,
+        email: rawUserData.email,
+        role: rawUserData.role,
+        department: rawUserData.department,
+        grades: rawUserData.grades,
+        subjects: rawUserData.subjects
       });
-      return;
     }
+  }, [rawUserData]);
 
-    // Email validation when searching by email
-    if (searchType === "email") {
-      if (!isValidEmail(searchQuery)) {
-        setNotification({
-          open: true,
-          message: "Please enter a valid email address",
-          severity: "error"
-        });
+  // First, let's add a useEffect to manually capture and log the problem
+  useEffect(() => {
+    console.log("DIRECT DEBUG - User details for display:");
+    console.log("Raw department data:", rawUserData.department);
+    console.log("Raw grades data:", rawUserData.grades);
+    console.log("Raw subjects data:", rawUserData.subjects);
+  }, [rawUserData.department, rawUserData.grades, rawUserData.subjects]);
+
+  // Add this utility function at the component level to help with display
+  const tryFormatValue = (value) => {
+    if (!value) return '';
+    
+    // If it's an array, handle each item
+    if (Array.isArray(value)) {
+      return value.map(item => typeof item === 'string' ? item : JSON.stringify(item)).join(', ');
+    }
+    
+    // If it's a string, return as is
+    if (typeof value === 'string') return value;
+    
+    // Otherwise, stringify it for display
+    return JSON.stringify(value);
+  };
+
+  // Fetch user data to display in the details card
+  useEffect(() => {
+    const fetchUserData = async () => {
+      if (!userData?.email || !userData?.role) {
+        setError('Missing user information. Please go back and try again.');
         return;
       }
-
-      if (searchQuery === loggedInUserEmail) {
-        setNotification({
-          open: true,
-          message: "To edit your own details, please go to your profile",
-          severity: "warning"
-        });
-        return;
-      }
-    }
-
-    setSearchLoading(true);
-    try {
-      const collectionName = role === "Admin" ? "admins" : "teachers";
       
-      // Use different approaches based on search type
-      if (searchType === "email") {
-        // For email, use exact match (case-sensitive)
-        const userQuery = query(
-          collection(db, `users/usersData/${collectionName}`),
-          where("email", "==", searchQuery)
-        );
+      setLoading(true);
+      
+      try {
+        // Initialize form with just the name
+        const initialForm = {
+          name: userData.name || '',
+          departments: [],
+          grades: [],
+          subjects: []
+        };
         
-        const querySnapshot = await getDocs(userQuery);
-        
-        if (!querySnapshot.empty) {
-          handleQueryResults(querySnapshot);
-        } else {
-          handleNoResults();
-        }
-      } else {
-        // For name search, first try exact match
-        const exactQuery = query(
-          collection(db, `users/usersData/${collectionName}`),
-          where("name", "==", searchQuery)
-        );
-        
-        let exactResults = await getDocs(exactQuery);
-        
-        if (!exactResults.empty) {
-          handleQueryResults(exactResults);
-        } else {
-          // If no exact match, fetch all users and filter on client side
-          console.log(`No exact name match found. Performing client-side search in ${collectionName} collection...`);
+        // For teachers, fetch additional data
+        if (userData.role === 'teacher') {
+          const teachersRef = collection(db, 'users', 'usersData', 'teachers');
+          const teacherQuery = query(teachersRef, where('email', '==', userData.email));
+          const teacherSnapshot = await getDocs(teacherQuery);
           
-          const allUsersQuery = query(collection(db, `users/usersData/${collectionName}`));
-          const allUsersSnapshot = await getDocs(allUsersQuery);
-          
-          // Filter users whose name contains the search query (case-insensitive)
-          const filteredDocs = allUsersSnapshot.docs.filter(doc => {
-            const userData = doc.data();
-            return userData.name && 
-                   userData.name.toLowerCase().includes(searchQuery.toLowerCase());
-          });
-          
-          if (filteredDocs.length > 0) {
-            console.log(`Found ${filteredDocs.length} users with name containing "${searchQuery}"`);
-            // Create a custom QuerySnapshot-like object
-            const customSnapshot = {
-              docs: filteredDocs,
-              empty: filteredDocs.length === 0
+          if (!teacherSnapshot.empty) {
+            const teacherDoc = teacherSnapshot.docs[0];
+            const teacherData = teacherDoc.data();
+            console.log("Raw teacher document data:", JSON.stringify(teacherData, null, 2));
+            
+            // Store raw data directly from database
+            setRawUserData({
+              name: teacherData.name || '',
+              email: teacherData.email || '',
+              role: teacherData.role || 'teacher',
+              department: teacherData.department || [],
+              grades: teacherData.grades || [],
+              subjects: teacherData.subjects || [],
+              documentId: teacherDoc.id // Store the document ID for later use
+            });
+            
+            // For compatibility with the rest of the code
+            const userDetails = {
+              name: teacherData.name || '',
+              email: teacherData.email || '',
+              role: teacherData.role || 'teacher',
+              departments: [], // Will be processed below
+              grades: [],
+              subjects: []
             };
-            handleQueryResults(customSnapshot);
-          } else {
-            handleNoResults();
+            
+            // Process departments for compatibility
+            if (teacherData.department !== undefined && teacherData.department !== null) {
+              if (Array.isArray(teacherData.department)) {
+                userDetails.departments = teacherData.department
+                  .filter(dept => dept !== null && dept !== undefined)
+                  .map(String);
+              } else {
+                userDetails.departments = [String(teacherData.department)];
+              }
+            }
+            
+            // Process grades
+            if (teacherData.grades !== undefined && teacherData.grades !== null) {
+              if (Array.isArray(teacherData.grades)) {
+                userDetails.grades = teacherData.grades
+                  .filter(grade => grade !== null && grade !== undefined)
+                  .map(String);
+              } else {
+                userDetails.grades = [String(teacherData.grades)];
+              }
+            }
+            
+            // Process subjects
+            if (teacherData.subjects !== undefined && teacherData.subjects !== null) {
+              if (Array.isArray(teacherData.subjects)) {
+                userDetails.subjects = teacherData.subjects
+                  .filter(subject => subject !== null && subject !== undefined)
+                  .map(String);
+              } else {
+                userDetails.subjects = [String(teacherData.subjects)];
+              }
+            }
+            
+            // Set originalUserData for compatibility
+            setOriginalUserData(userDetails);
+            
+            // Set the name in the form
+            initialForm.name = teacherData.name || '';
+          }
+        } else if (userData.role === 'admin') {
+          // Similar handling for admin
+          const adminsRef = collection(db, 'users', 'usersData', 'admins');
+          const adminQuery = query(adminsRef, where('email', '==', userData.email));
+          const adminSnapshot = await getDocs(adminQuery);
+          
+          if (!adminSnapshot.empty) {
+            const adminDoc = adminSnapshot.docs[0];
+            const adminData = adminDoc.data();
+            
+            setRawUserData({
+              name: adminData.name || '',
+              email: adminData.email || '',
+              role: 'admin',
+              documentId: adminDoc.id
+            });
+            
+            setOriginalUserData({
+              name: adminData.name || '',
+              email: adminData.email || '',
+              role: 'admin',
+              departments: [],
+              grades: [],
+              subjects: []
+            });
+            
+            initialForm.name = adminData.name || '';
           }
         }
+        
+        setFormData(initialForm);
+      } catch (err) {
+        console.error("Error fetching user data:", err);
+        setError('Failed to load user data: ' + err.message);
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
-      console.error("Error fetching user:", error);
-      setNotification({
-        open: true,
-        message: "Error fetching user: " + error.message,
-        severity: "error"
-      });
-    } finally {
-      setSearchLoading(false);
-    }
-  };
+    };
+    
+    fetchUserData();
+  }, [userData]);
 
-  // Helper function to handle query results
-  const handleQueryResults = (querySnapshot) => {
-    // For search by email, continue with existing behavior
-    if (searchType === "email") {
-      const userDoc = querySnapshot.docs[0];
-      const data = userDoc.data();
+  // Fix the departments filtering code to correctly show departments
+  useEffect(() => {
+    const loadDepartments = async () => {
+      if (userData?.role !== 'teacher') return;
       
-      // Check if this is the current user
-      if (data.email === loggedInUserEmail) {
-        setNotification({
-          open: true,
-          message: "To edit your own details, please go to your profile",
-          severity: "warning"
+      setDepartmentsLoading(true);
+      
+      try {
+        const categoriesRef = collection(db, 'categories');
+        const categoriesSnapshot = await getDocs(categoriesRef);
+        
+        const departmentsList = categoriesSnapshot.docs
+          .map(doc => ({
+            id: doc.id,
+            name: doc.data().name || ''
+          }))
+          .filter(dept => {
+            // Only include departments with proper names (not just IDs or empty strings)
+            // This regex was incorrectly filtering out normal words like "Arts"
+            return dept.name && dept.name.trim() !== '';
+            
+            // Optionally, to filter out things that look like GUIDs:
+            // && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(dept.name);
+          })
+          .sort((a, b) => a.name.localeCompare(b.name));
+        
+        console.log("Filtered departments:", departmentsList);
+        setDepartments(departmentsList);
+        
+        // Create a mapping of department IDs/names for display in the details card
+        const deptMap = {};
+        departmentsList.forEach(dept => {
+          deptMap[dept.id] = dept.name;
+          deptMap[dept.name] = dept.name;
         });
-        setUserData(null);
+        setDepartmentNameMap(deptMap);
+        
+      } catch (err) {
+        console.error("Error loading departments:", err);
+      } finally {
+        setDepartmentsLoading(false);
+      }
+    };
+    
+    loadDepartments();
+  }, [userData?.role]);
+
+  // Improved grades loading with better debugging
+  useEffect(() => {
+    const loadGrades = async () => {
+      if (userData?.role !== 'teacher' || !formData.departments.length) {
+        setGrades([]);
         return;
       }
       
-      // Set user data for editing
-      setUserData(prepareUserDataForEditing(userDoc));
-      setIsChanged(false);
-      setShowSearchResults(false); // Hide search results if they were shown
-    } 
-    // For search by name with multiple results, show the selection list
-    else if (querySnapshot.docs.length > 1) {
-      console.log(`Found ${querySnapshot.docs.length} users matching "${searchQuery}"`);
+      setGradesLoading(true);
+      console.log("Loading grades for departments:", formData.departments);
       
-      // Map documents to a simpler format for the results list
-      const results = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      
-      setSearchResults(results);
-      setShowSearchResults(true);
-      setUserData(null); // Clear any previously selected user
-      
-      setNotification({
-        open: true,
-        message: `Found ${querySnapshot.docs.length} users matching "${searchQuery}". Please select a user to edit.`,
-        severity: "info"
-      });
-    }
-    // For single result, just show it directly
-    else {
-      const userDoc = querySnapshot.docs[0];
-      setUserData(prepareUserDataForEditing(userDoc));
-      setIsChanged(false);
-      setShowSearchResults(false);
-    }
-  };
-
-  // Helper function to prepare user data for editing
-  const prepareUserDataForEditing = (userDoc) => {
-    const data = userDoc.data();
-    return {
-      ...data, 
-      id: userDoc.id,
-      departmentString: Array.isArray(data.department) ? data.department.join(", ") : (data.department || ""),
-      gradesString: Array.isArray(data.grades) ? data.grades.join(", ") : "",
-      subjectsString: Array.isArray(data.subjects) ? data.subjects.join(", ") : ""
-    };
-  };
-
-  // Add function to select a user from search results
-  const handleSelectUser = (selectedUser) => {
-    // Format the user data for editing
-    const formattedUserData = {
-      ...selectedUser,
-      departmentString: Array.isArray(selectedUser.department) ? 
-        selectedUser.department.join(", ") : (selectedUser.department || ""),
-      gradesString: Array.isArray(selectedUser.grades) ? 
-        selectedUser.grades.join(", ") : "",
-      subjectsString: Array.isArray(selectedUser.subjects) ? 
-        selectedUser.subjects.join(", ") : ""
+      try {
+        // Load grades for all selected departments
+        // Try both the department ID and the department NAME
+        const gradesPromises = formData.departments.map(async (deptId) => {
+          const deptObj = departments.find(d => d.id === deptId);
+          const deptName = deptObj?.name || deptId;
+          
+          console.log(`Fetching grades for department: ${deptName} (ID: ${deptId})`);
+          
+          // First try querying by ID
+          const gradesRef = collection(db, 'grades');
+          const gradesQueryById = query(gradesRef, where('department', '==', deptId));
+          const gradesSnapshotById = await getDocs(gradesQueryById);
+          
+          console.log(`Found ${gradesSnapshotById.size} grades with department ID match`);
+          
+          // If no results, try querying by name
+          let gradesSnapshot = gradesSnapshotById;
+          if (gradesSnapshotById.empty && deptName !== deptId) {
+            console.log(`Trying to match by department name: ${deptName}`);
+            const gradesQueryByName = query(gradesRef, where('department', '==', deptName));
+            const gradesSnapshotByName = await getDocs(gradesQueryByName);
+            console.log(`Found ${gradesSnapshotByName.size} grades with department NAME match`);
+            
+            if (gradesSnapshotByName.size > 0) {
+              gradesSnapshot = gradesSnapshotByName;
+            }
+          }
+          
+          // If still no results, try with a case-insensitive approach
+          if (gradesSnapshot.empty) {
+            console.log("No exact matches, checking for grades with department field containing this value...");
+            // We'll fetch all grades and filter client-side
+            const allGradesQuery = query(gradesRef);
+            const allGradesSnapshot = await getDocs(allGradesQuery);
+            
+            // Manual filtering with logging
+            const matchedDocs = allGradesSnapshot.docs.filter(doc => {
+              const deptValue = doc.data().department;
+              if (!deptValue) return false;
+              
+              const isMatch = 
+                String(deptValue).toLowerCase().includes(String(deptId).toLowerCase()) ||
+                String(deptValue).toLowerCase().includes(String(deptName).toLowerCase());
+                
+              if (isMatch) {
+                console.log(`Found potential match: Grade ${doc.data().name} with department ${deptValue}`);
+              }
+              
+              return isMatch;
+            });
+            
+            console.log(`Found ${matchedDocs.length} grades with fuzzy matching`);
+            
+            // Create a new snapshot-like object with the matched docs
+            gradesSnapshot = {
+              docs: matchedDocs,
+              empty: matchedDocs.length === 0,
+              size: matchedDocs.length
+            };
+          }
+          
+          return gradesSnapshot.docs.map(doc => {
+            console.log(`Processing grade: ${doc.id} - ${doc.data().name || doc.id}`);
+            return {
+              id: doc.id,
+              name: doc.data().name || doc.id,
+              department: deptId,
+              departmentName: deptName
+            };
+          });
+        });
+        
+        const allGradesArrays = await Promise.all(gradesPromises);
+        const allGrades = allGradesArrays.flat().sort((a, b) => {
+          // Sort by department name first, then by grade name
+          const deptCompare = a.departmentName.localeCompare(b.departmentName);
+          return deptCompare !== 0 ? deptCompare : a.name.localeCompare(b.name);
+        });
+        
+        console.log("Grades loaded and sorted by department:", allGrades);
+        setGrades(allGrades);
+        
+        // Update grade name mapping
+        const gradeMap = {};
+        allGrades.forEach(grade => {
+          gradeMap[grade.id] = `${grade.departmentName}: ${grade.name}`;
+        });
+        setGradeNameMap(gradeMap);
+        
+      } catch (err) {
+        console.error("Error loading grades:", err);
+      } finally {
+        setGradesLoading(false);
+      }
     };
     
-    setUserData(formattedUserData);
-    setShowSearchResults(false);
-    setIsChanged(false);
-  };
+    loadGrades();
+  }, [formData.departments, departments, userData?.role]);
 
-  // Helper function to handle no results
-  const handleNoResults = () => {
-    setNotification({
-      open: true,
-      message: `No user found with ${searchType === "email" ? 
-        "email address" : 
-        `name containing "${searchQuery}"`} in the ${role.toLowerCase()} database`,
-      severity: "error"
-    });
-    setUserData(null);
-  };
+  // Enhanced subject loading with better debugging
+  useEffect(() => {
+    const loadSubjects = async () => {
+      if (userData?.role !== 'teacher' || !formData.departments.length || !formData.grades.length) {
+        setSubjects([]);
+        return;
+      }
+      
+      setSubjectsLoading(true);
+      console.log("Loading subjects for selected grades:", formData.grades);
+      
+      try {
+        // Create department-grade pairs for querying
+        const deptGradePairs = [];
+        
+        formData.grades.forEach(gradeId => {
+          const gradeObj = grades.find(g => normalizeId(g.id) === normalizeId(gradeId));
+          
+          if (gradeObj && gradeObj.department) {
+            deptGradePairs.push({
+              department: gradeObj.department,
+              grade: gradeId,
+              departmentName: gradeObj.departmentName,
+              gradeName: gradeObj.name
+            });
+            console.log(`Created pair: department=${gradeObj.department}, grade=${gradeId}`);
+          } else {
+            console.log(`Could not find grade object for ID: ${gradeId}`);
+          }
+        });
+        
+        console.log("Department-Grade pairs for subject queries:", deptGradePairs);
+        
+        if (deptGradePairs.length === 0) {
+          console.log("No valid department-grade pairs found, trying alternative approach");
+          
+          // Fallback: try to use just the grade IDs directly
+          const simplePairs = formData.grades.map(gradeId => {
+            // Extract department from grade format if it's like "Arts|Class 1"
+            const parts = gradeId.split('|');
+            let department = null;
+            let gradeName = gradeId;
+            
+            if (parts.length > 1) {
+              department = parts[0];
+              gradeName = parts[1];
+              console.log(`Split grade ID ${gradeId} into department=${department}, grade=${gradeName}`);
+              
+              return {
+                department: department,
+                grade: gradeId,
+                departmentName: department,
+                gradeName: gradeName
+              };
+            }
+            
+            // Try to find a matching department from selected departments
+            for (const deptId of formData.departments) {
+              const dept = departments.find(d => d.id === deptId);
+              if (dept) {
+                console.log(`Using department ${dept.name} for grade ${gradeId}`);
+                return {
+                  department: deptId,
+                  grade: gradeId,
+                  departmentName: dept.name,
+                  gradeName: gradeId
+                };
+              }
+            }
+            
+            return null;
+          }).filter(Boolean);
+          
+          if (simplePairs.length > 0) {
+            console.log("Created fallback department-grade pairs:", simplePairs);
+            deptGradePairs.push(...simplePairs);
+          }
+        }
+        
+        if (deptGradePairs.length === 0) {
+          console.log("Still no valid pairs, cannot fetch subjects");
+          setSubjects([]);
+          setSubjectsLoading(false);
+          return;
+        }
+        
+        // Load subjects for each department-grade pair with multiple matching strategies
+        const subjectsPromises = deptGradePairs.map(async ({ department, grade, departmentName, gradeName }) => {
+          console.log(`Fetching subjects for department=${department} (${departmentName}), grade=${grade} (${gradeName})`);
+          
+          // Try exact query first
+          const subjectsRef = collection(db, 'subjects');
+          const subjectsQuery = query(
+            subjectsRef, 
+            where('department', '==', department),
+            where('grade', '==', grade)
+          );
+          let subjectsSnapshot = await getDocs(subjectsQuery);
+          
+          console.log(`Found ${subjectsSnapshot.size} subjects with exact match`);
+          
+          // If no results, try with department name instead of ID
+          if (subjectsSnapshot.empty && departmentName) {
+            console.log(`Trying with department name: ${departmentName} instead of ID`);
+            const nameQuery = query(
+              subjectsRef, 
+              where('department', '==', departmentName),
+              where('grade', '==', grade)
+            );
+            const nameSnapshot = await getDocs(nameQuery);
+            
+            if (nameSnapshot.size > 0) {
+              console.log(`Found ${nameSnapshot.size} subjects with department name match`);
+              subjectsSnapshot = nameSnapshot;
+            }
+          }
+          
+          // If still no results, try with just department (no grade filter)
+          if (subjectsSnapshot.empty) {
+            console.log("Trying with just department filter (no grade filter)");
+            const deptOnlyQuery = query(subjectsRef, where('department', '==', department));
+            const deptOnlySnapshot = await getDocs(deptOnlyQuery);
+            
+            if (deptOnlySnapshot.size > 0) {
+              console.log(`Found ${deptOnlySnapshot.size} subjects with department-only match`);
+              
+              // Filter client-side for grades that might match
+              const filteredDocs = deptOnlySnapshot.docs.filter(doc => {
+                const subjectGrade = doc.data().grade;
+                if (!subjectGrade) return false;
+                
+                const isMatch = 
+                  normalizeId(subjectGrade) === normalizeId(grade) ||
+                  String(subjectGrade).includes(String(gradeName));
+                  
+                if (isMatch) {
+                  console.log(`Found matching subject: ${doc.data().name} with grade ${subjectGrade}`);
+                }
+                
+                return isMatch;
+              });
+              
+              if (filteredDocs.length > 0) {
+                console.log(`Found ${filteredDocs.length} subjects after client-side filtering`);
+                subjectsSnapshot = { docs: filteredDocs, empty: false, size: filteredDocs.length };
+              }
+            }
+          }
+          
+          // If STILL no results, try fetching all subjects and filter client-side
+          if (subjectsSnapshot.empty) {
+            console.log("No match found with server queries, fetching all subjects for client-side filtering");
+            const allSubjectsSnapshot = await getDocs(subjectsRef);
+            
+            // Try to match subjects by checking if their fields contain our department/grade values
+            const matchedDocs = allSubjectsSnapshot.docs.filter(doc => {
+              const data = doc.data();
+              const subjectDept = data.department;
+              const subjectGrade = data.grade;
+              
+              const deptMatch = 
+                normalizeId(subjectDept) === normalizeId(department) ||
+                String(subjectDept).includes(String(departmentName));
+                
+              const gradeMatch = 
+                normalizeId(subjectGrade) === normalizeId(grade) ||
+                String(subjectGrade).includes(String(gradeName));
+                
+              return deptMatch && gradeMatch;
+            });
+            
+            if (matchedDocs.length > 0) {
+              console.log(`Found ${matchedDocs.length} subjects with fuzzy matching`);
+              subjectsSnapshot = { docs: matchedDocs, empty: false, size: matchedDocs.length };
+            }
+          }
+          
+          return subjectsSnapshot.docs.map(doc => ({
+            id: doc.id,
+            name: doc.data().name || doc.id,
+            department: department,
+            departmentName: departmentName,
+            grade: grade,
+            gradeName: gradeName
+          }));
+        });
+        
+        const allSubjectsArrays = await Promise.all(subjectsPromises);
+        const allSubjects = allSubjectsArrays.flat().sort((a, b) => {
+          // Sort by department, then grade, then name
+          const deptCompare = a.departmentName.localeCompare(b.departmentName);
+          if (deptCompare !== 0) return deptCompare;
+          const gradeCompare = a.gradeName.localeCompare(b.gradeName);
+          return gradeCompare !== 0 ? gradeCompare : a.name.localeCompare(b.name);
+        });
+        
+        console.log("Subjects loaded and sorted:", allSubjects);
+        setSubjects(allSubjects);
+        
+        // Update subject name mapping
+        const subjectMap = {};
+        allSubjects.forEach(subject => {
+          subjectMap[subject.id] = `${subject.departmentName} - ${subject.gradeName}: ${subject.name}`;
+        });
+        setSubjectNameMap(subjectMap);
+        
+      } catch (err) {
+        console.error("Error loading subjects:", err);
+      } finally {
+        setSubjectsLoading(false);
+      }
+    };
+    
+    loadSubjects();
+  }, [formData.departments, formData.grades, grades, userData?.role, departments]);
 
-  const handleUpdate = async () => {
-    if (!isChanged) {
-      setNotification({
-        open: true,
-        message: "No changes to update",
-        severity: "info"
+  // Add this useEffect to load existing items for the user details card
+  useEffect(() => {
+    const loadUserAssignedItems = async () => {
+      if (!originalUserData.departments.length || userData?.role !== 'teacher') return;
+      
+      try {
+        setLoading(true);
+        
+        // Load grades for user's departments
+        const userGradesPromises = originalUserData.departments.map(async deptId => {
+          const gradesRef = collection(db, 'grades');
+          const gradesQuery = query(gradesRef, where('department', '==', deptId));
+          const gradesSnapshot = await getDocs(gradesQuery);
+          
+          return gradesSnapshot.docs.map(doc => ({
+            id: doc.id,
+            name: doc.data().name || doc.id,
+            department: deptId
+          }));
+        });
+        
+        const userGradesArrays = await Promise.all(userGradesPromises);
+        const userGrades = userGradesArrays.flat();
+        
+        // Create a mapping for grades
+        const tempGradeMap = {};
+        userGrades.forEach(grade => {
+          const deptName = departments.find(d => d.id === grade.department)?.name || grade.department;
+          tempGradeMap[grade.id] = `${deptName}: ${grade.name}`;
+        });
+        
+        // Add to the grade name map
+        setGradeNameMap(prev => ({ ...prev, ...tempGradeMap }));
+        
+        // Do similar for subjects if needed
+        // ...
+        
+      } catch (err) {
+        console.error("Error loading user's assigned items:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    loadUserAssignedItems();
+  }, [originalUserData.departments, departments, userData?.role]);
+
+  // Add this useEffect to specifically load name mappings for existing user data
+  useEffect(() => {
+    const loadUserDataMappings = async () => {
+      if (!rawUserData || !rawUserData.email) return;
+      
+      try {
+        console.log("Loading name mappings for user details display");
+        
+        // 1. For departments - load all departments first
+        if (Array.isArray(rawUserData.department) && rawUserData.department.length > 0) {
+          const categoriesRef = collection(db, 'categories');
+          const categoriesSnapshot = await getDocs(categoriesRef);
+          
+          const deptMap = { ...departmentNameMap };
+          categoriesSnapshot.docs.forEach(doc => {
+            deptMap[doc.id] = doc.data().name || doc.id;
+          });
+          
+          // Add direct name mappings for department names
+          rawUserData.department.forEach(dept => {
+            if (typeof dept === 'string') {
+              deptMap[dept] = dept;
+            }
+          });
+          
+          setDepartmentNameMap(deptMap);
+          console.log("Department map updated:", deptMap);
+        }
+        
+        // 2. For grades - load all grades related to user's departments
+        if (Array.isArray(rawUserData.grades) && rawUserData.grades.length > 0) {
+          const gradesRef = collection(db, 'grades');
+          const allGradesSnapshot = await getDocs(gradesRef);
+          
+          const gradeMap = { ...gradeNameMap };
+          
+          // Process all grades
+          allGradesSnapshot.docs.forEach(doc => {
+            const gradeData = doc.data();
+            const deptName = departmentNameMap[gradeData.department] || gradeData.department;
+            gradeMap[doc.id] = `${deptName}: ${gradeData.name || doc.id}`;
+          });
+          
+          // Add special handling for grades in format "Department|Grade"
+          rawUserData.grades.forEach(grade => {
+            if (typeof grade === 'string' && grade.includes('|')) {
+              const [deptPart, gradePart] = grade.split('|');
+              gradeMap[grade] = `${deptPart}: ${gradePart}`;
+            }
+          });
+          
+          setGradeNameMap(gradeMap);
+          console.log("Grade map updated:", gradeMap);
+        }
+        
+        // 3. For subjects - load all subjects or process existing names
+        if (Array.isArray(rawUserData.subjects) && rawUserData.subjects.length > 0) {
+          const subjectsRef = collection(db, 'subjects');
+          const allSubjectsSnapshot = await getDocs(subjectsRef);
+          
+          const subjectMap = { ...subjectNameMap };
+          
+          // Process all subjects from database
+          allSubjectsSnapshot.docs.forEach(doc => {
+            const subjectData = doc.data();
+            const deptName = departmentNameMap[subjectData.department] || subjectData.department;
+            
+            // Try to get grade name from grade ID
+            let gradeName = subjectData.grade;
+            if (gradeNameMap[subjectData.grade]) {
+              gradeName = gradeNameMap[subjectData.grade].split(': ')[1];
+            } else if (String(subjectData.grade).includes('|')) {
+              gradeName = subjectData.grade.split('|')[1];
+            }
+            
+            subjectMap[doc.id] = `${deptName} - ${gradeName}: ${subjectData.name || doc.id}`;
+          });
+          
+          // Add direct mappings for subject names
+          rawUserData.subjects.forEach(subject => {
+            if (typeof subject === 'string' && !subjectMap[subject]) {
+              // If it looks like a plain name, use it directly
+              if (!subject.includes('|') && !subject.includes('-')) {
+                subjectMap[subject] = subject;
+              }
+            }
+          });
+          
+          setSubjectNameMap(subjectMap);
+          console.log("Subject map updated:", subjectMap);
+        }
+        
+      } catch (err) {
+        console.error("Error loading user data mappings:", err);
+      }
+    };
+    
+    loadUserDataMappings();
+  }, [rawUserData, departmentNameMap, gradeNameMap, subjectNameMap]);
+
+  // Form field change handler
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+        
+    if (name === 'departments') {
+      console.log("Selected departments:", value);
+  
+      // When departments change, reset grades and subjects
+      setFormData(prev => ({
+        ...prev,
+        departments: value,
+        grades: [], 
+        subjects: []
+      }));
+  
+      // Debug selected departments
+      value.forEach(deptId => {
+        const dept = departments.find(d => d.id === deptId);
+        console.log(`Selected department: ${dept?.name || 'Unknown'} (ID: ${deptId})`);
       });
+    } else if (name === 'grades') {
+      // When grades change, reset subjects
+      setFormData(prev => ({
+        ...prev,
+        grades: value,
+        subjects: []
+      }));
+    } else {
+      // For other fields
+      setFormData(prev => ({
+        ...prev,
+        [name]: value
+      }));
+    }
+  };
+
+  // Helper functions for checking if items are selected
+  const isDepartmentSelected = (deptId) => 
+    formData.departments.some(id => normalizeId(id) === normalizeId(deptId));
+  
+  const isGradeSelected = (gradeId) => 
+    formData.grades.some(id => normalizeId(id) === normalizeId(gradeId));
+  
+  const isSubjectSelected = (subjectId) => 
+    formData.subjects.some(id => normalizeId(id) === normalizeId(subjectId));
+
+  // Form submission handler - updated to save names instead of IDs
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  setLoading(true);
+  setError('');
+  setSuccess('');
+  
+  try {
+    // Basic validation
+    if (!formData.name) {
+      setError('Please enter a name');
+      setLoading(false);
+      return;
+    }
+    
+    // Combine original departments with newly selected ones
+    // Use rawUserData.department to ensure we're using database values
+    const combinedDepartmentIds = [...new Set([
+      ...(Array.isArray(rawUserData.department) ? rawUserData.department : []),
+      ...formData.departments
+    ])];
+    
+    // Also combine grades and subjects using rawUserData for original values
+    const combinedGradeIds = [...new Set([
+      ...(Array.isArray(rawUserData.grades) ? rawUserData.grades : []),
+      ...formData.grades
+    ])];
+    
+    const combinedSubjectIds = [...new Set([
+      ...(Array.isArray(rawUserData.subjects) ? rawUserData.subjects : []),
+      ...formData.subjects
+    ])];
+    
+    // Convert IDs to names
+    const combinedDepartments = combinedDepartmentIds.map(id => {
+      // Try to get name from department name map
+      const nameFromMap = departmentNameMap[id];
+      if (nameFromMap) return nameFromMap;
+      
+      // Try to find in departments array
+      const dept = departments.find(d => normalizeId(d.id) === normalizeId(id));
+      if (dept?.name) return dept.name;
+      
+      // If it looks like a name already, return it as is
+      if (typeof id === 'string' && !id.includes('/') && !id.match(/^[a-zA-Z0-9-]+$/)) {
+        return id;
+      }
+      
+      return id; // Fallback to ID if we can't find the name
+    });
+    
+    const combinedGrades = combinedGradeIds.map(id => {
+      // Try to get name from grade name map
+      const nameFromMap = gradeNameMap[id];
+      if (nameFromMap) return nameFromMap;
+      
+      // Try to find in grades array
+      const grade = grades.find(g => normalizeId(g.id) === normalizeId(id));
+      if (grade) {
+        return `${grade.departmentName}: ${grade.name}`;
+      }
+      
+      // Try to process ID if it looks like "Department|Grade"
+      if (typeof id === 'string' && id.includes('|')) {
+        const [deptPart, gradePart] = id.split('|');
+        return `${deptPart}: ${gradePart}`;
+      }
+      
+      return id; // Fallback to ID
+    });
+    
+    const combinedSubjects = combinedSubjectIds.map(id => {
+      // Try to get name from subject name map
+      const nameFromMap = subjectNameMap[id];
+      if (nameFromMap) return nameFromMap;
+      
+      // Try to find in subjects array
+      const subject = subjects.find(s => normalizeId(s.id) === normalizeId(id));
+      if (subject) {
+        return `${subject.departmentName} - ${subject.gradeName}: ${subject.name}`;
+      }
+      
+      return id; // Fallback to ID
+    });
+    
+    if (userData?.role === 'teacher' && !combinedDepartments.length) {
+      setError('Teachers require at least one department assignment');
+      setLoading(false);
       return;
     }
 
-    setLoading(true);
-    try {
-      const collectionName = role === "Admin" ? "admins" : "teachers";
-      const docRef = doc(db, `users/usersData/${collectionName}/${userData.id}`);
-      
-      // Prepare update data
-      const updateData = {
-        name: userData.name
-      };
-      
-      // For teacher role, add the specialized fields
-      if (role === "Teacher") {
-        // Convert comma-separated strings back to arrays for Firestore
-        updateData.department = userData.departmentString ? 
-          userData.departmentString.split(",").map(item => item.trim()) : [];
-          
-        updateData.grades = userData.gradesString ? 
-          userData.gradesString.split(",").map(item => item.trim()) : [];
-          
-        updateData.subjects = userData.subjectsString ? 
-          userData.subjectsString.split(",").map(item => item.trim()) : [];
-      }
-      
-      // 1. Update in role-specific collection
-      await updateDoc(docRef, updateData);
-      
-      // 2. Find and update in login database
-      const loginQuery = query(
-        collection(db, "users", "usersData", "login"),
-        where("email", "==", userData.email)
-      );
-      
-      const loginSnapshot = await getDocs(loginQuery);
-      if (!loginSnapshot.empty) {
-        const loginDocRef = doc(db, "users", "usersData", "login", loginSnapshot.docs[0].id);
-        await updateDoc(loginDocRef, {
-          name: userData.name
-          // Not updating role - that would change user access
+    // Update user in login collection
+    const loginRef = collection(db, 'users', 'usersData', 'login');
+    const loginQuery = query(loginRef, where('email', '==', userData?.email));
+    const loginSnapshot = await getDocs(loginQuery);
+    
+    if (!loginSnapshot.empty) {
+      const loginDocRef = doc(db, 'users', 'usersData', 'login', loginSnapshot.docs[0].id);
+      await updateDoc(loginDocRef, {
+        name: formData.name,
+        updatedAt: new Date()
+      });
+    }
+    
+    // Update in role-specific collection
+    if (userData?.role === 'teacher') {
+      // If we have the document ID, use it directly
+      if (rawUserData.documentId) {
+        const teacherDocRef = doc(db, 'users', 'usersData', 'teachers', rawUserData.documentId);
+        await updateDoc(teacherDocRef, {
+          name: formData.name,
+          // Now using names instead of IDs
+          department: combinedDepartments, // Using 'department' (singular) to match your database
+          grades: combinedGrades,
+          subjects: combinedSubjects,
+          updatedAt: new Date()
         });
+      } else {
+        // Fallback to query approach
+        const teachersRef = collection(db, 'users', 'usersData', 'teachers');
+        const teacherQuery = query(teachersRef, where('email', '==', userData?.email));
+        const teacherSnapshot = await getDocs(teacherQuery);
+        
+        if (!teacherSnapshot.empty) {
+          const teacherDocRef = doc(db, 'users', 'usersData', 'teachers', teacherSnapshot.docs[0].id);
+          await updateDoc(teacherDocRef, {
+            name: formData.name,
+            department: combinedDepartments,
+            grades: combinedGrades,
+            subjects: combinedSubjects,
+            updatedAt: new Date()
+          });
+        }
       }
-      
-      setNotification({
-        open: true,
-        message: "User updated successfully in all databases!",
-        severity: "success"
-      });
-      setIsChanged(false);
-    } catch (error) {
-      console.error("Error updating user:", error);
-      setNotification({
-        open: true,
-        message: "Error updating user: " + error.message,
-        severity: "error"
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const deleteUser = async () => {
-    setDeleteDialog(false);
-    setLoading(true);
-    try {
-      // 1. Delete from role-specific collection
-      const collectionName = role === "Admin" ? "admins" : "teachers";
-      const docRef = doc(db, `users/usersData/${collectionName}/${userData.id}`);
-      await deleteDoc(docRef);
-      
-      // 2. Find and delete from login database
-      const loginQuery = query(
-        collection(db, "users", "usersData", "login"),
-        where("email", "==", userData.email)
-      );
-      
-      const loginSnapshot = await getDocs(loginQuery);
-      if (!loginSnapshot.empty) {
-        const loginDocRef = doc(db, "users", "usersData", "login", loginSnapshot.docs[0].id);
-        await deleteDoc(loginDocRef);
+    } else if (userData?.role === 'admin') {
+      // Admin handling remains unchanged
+      if (rawUserData.documentId) {
+        const adminDocRef = doc(db, 'users', 'usersData', 'admins', rawUserData.documentId);
+        await updateDoc(adminDocRef, {
+          name: formData.name,
+          updatedAt: new Date()
+        });
+      } else {
+        // Fallback
+        const adminsRef = collection(db, 'users', 'usersData', 'admins');
+        const adminQuery = query(adminsRef, where('email', '==', userData?.email));
+        const adminSnapshot = await getDocs(adminQuery);
+        
+        if (!adminSnapshot.empty) {
+          const adminDocRef = doc(db, 'users', 'usersData', 'admins', adminSnapshot.docs[0].id);
+          await updateDoc(adminDocRef, {
+            name: formData.name,
+            updatedAt: new Date()
+          });
+        }
       }
-      
-      setNotification({
-        open: true,
-        message: "User deleted from all databases. Note: The authentication account still exists and must be deleted from Firebase Console.",
-        severity: "warning"
-      });
-      
-      // Reset form
-      setUserData(null);
-      setSearchQuery("");
-      setRole("Admin");
-    } catch (error) {
-      console.error("Error deleting user:", error);
-      setNotification({
-        open: true,
-        message: "Error deleting user: " + error.message,
-        severity: "error"
-      });
-    } finally {
-      setLoading(false);
     }
-  };
+    
+    setSuccess('User updated successfully');
+    setTimeout(() => {
+      navigate('/user-accounts');
+    }, 1500);
+    
+  } catch (err) {
+    console.error('Error updating user:', err);
+    setError('Error updating user: ' + err.message);
+  } finally {
+    setLoading(false);
+  }
+};
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setUserData({ ...userData, [name]: value });
-    setIsChanged(true);
-  };
+  // Better name formatting for the user details card
 
-  const handleCloseNotification = () => {
-    setNotification({...notification, open: false});
+  // First, let's create a utility function to format item names
+  const getFormattedName = (id, collection, nameMap) => {
+    // First try the name map
+    if (nameMap[id]) return nameMap[id];
+    
+    // Next look in the loaded collection
+    const item = collection.find(item => normalizeId(item.id) === normalizeId(id));
+    if (item) {
+      if (item.departmentName && item.name) {
+        return `${item.departmentName}: ${item.name}`;
+      }
+      return item.name;
+    }
+    
+    // For grades, try to parse format like "Department|Grade"
+    const parts = id.split('|');
+    if (parts.length > 1) {
+      return `${parts[0]}: ${parts[1]}`;
+    }
+    
+    // Return the ID as a fallback
+    return id;
   };
 
   return (
     <Container maxWidth="md" sx={{ py: 4 }}>
-      <Fade in={true} timeout={800}>
-        <Paper
-          elevation={4}
-          sx={{
-            borderRadius: 3,
-            overflow: "hidden",
-            background: "linear-gradient(to right, #ffffff 0%, #f9fafb 100%)",
-          }}
-        >
-          {/* Paper content */}
-          <Box sx={{ p: { xs: 3, md: 4 } }}>
-            {/* Header and back button */}
-            <Box sx={{ display: "flex", alignItems: "center", mb: 3 }}>
-              <IconButton 
-                onClick={() => navigate("/admin")}
-                sx={{ mr: 2, bgcolor: "#f0f3f8" }}
-              >
-                <BackIcon />
-              </IconButton>
-              <Typography
-                variant="h4"
-                component="h1"
-                sx={{
-                  fontWeight: 600,
-                  color: "#011E41",
-                  display: "flex",
-                  alignItems: "center",
-                }}
-              >
-                <EditIcon sx={{ mr: 1.5 }} fontSize="large" />
-                Edit User
-              </Typography>
-            </Box>
-            
-            <Divider sx={{ mb: 4 }} />
-            
-            {/* Search User Form */}
-            <Card variant="outlined" sx={{ mb: 4, borderRadius: 2 }}>
-              <CardContent>
-                <Typography variant="h6" sx={{ mb: 3, color: "#011E41" }}>
-                  Find User
-                </Typography>
+      {/* USER DETAILS CARD - Updated to handle loading state */}
+      <Paper elevation={3} sx={{ p: 3, borderRadius: 2, mb: 4 }}>
+        <Typography variant="h6" component="h2" sx={{ fontWeight: 600, color: '#011E41', mb: 2 }}>
+          Current User Details
+        </Typography>
+        
+        {loading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+            <CircularProgress size={24} sx={{ mr: 1 }} />
+            <Typography>Loading user details...</Typography>
+          </Box>
+        ) : (
+          <Grid container spacing={2}>
+            <Grid item xs={12} md={6}>
+              <List dense>
+                <ListItem>
+                  <ListItemIcon>
+                    <UserIcon color="primary" />
+                  </ListItemIcon>
+                  <MuiListItemText 
+                    primary="Name" 
+                    secondary={rawUserData.name || 'Not specified'} 
+                  />
+                </ListItem>
                 
-                {/* Add search type radio buttons */}
-                <Box sx={{ mb: 2 }}>
-                  <FormControl component="fieldset">
-                    <RadioGroup
-                      row
-                      name="searchType"
-                      value={searchType}
-                      onChange={(e) => {
-                        setSearchType(e.target.value);
-                        setUserData(null);
-                      }}
-                    >
-                      <FormControlLabel value="email" control={<Radio />} label="Search by Email" />
-                      <FormControlLabel value="name" control={<Radio />} label="Search by Name" />
-                    </RadioGroup>
-                  </FormControl>
-                </Box>
+                <ListItem>
+                  <ListItemIcon>
+                    <EmailIcon color="primary" />
+                  </ListItemIcon>
+                  <MuiListItemText 
+                    primary="Email" 
+                    secondary={rawUserData.email || 'Not specified'} 
+                  />
+                </ListItem>
                 
-                <Grid container spacing={3}>
-                  <Grid item xs={12} sm={6}>
-                    <TextField
-                      label={searchType === "email" ? "User Email" : "User Name"}
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      required
-                      fullWidth
-                      error={searchType === "email" && searchQuery && !isValidEmail(searchQuery)}
-                      helperText={searchType === "email" && searchQuery && !isValidEmail(searchQuery) ? 
-                        "Please enter a valid email address" : ""}
-                      InputProps={{
-                        startAdornment: (
-                          <InputAdornment position="start">
-                            {searchType === "email" ? 
-                              <EmailIcon sx={{ color: "#011E41" }} /> : 
-                              <PersonIcon sx={{ color: "#011E41" }} />
-                            }
-                          </InputAdornment>
-                        ),
-                      }}
+                <ListItem>
+                  <ListItemIcon>
+                    <RoleIcon color="primary" />
+                  </ListItemIcon>
+                  <MuiListItemText 
+                    primary="Role" 
+                    secondary={rawUserData.role === 'admin' ? 'Admin' : 'Teacher'} 
+                  />
+                </ListItem>
+              </List>
+            </Grid>
+            
+            {rawUserData.role === 'teacher' && (
+              <Grid item xs={12} md={6}>
+                <List dense>
+                  <ListItem>
+                    <ListItemIcon>
+                      <DepartmentIcon color="primary" />
+                    </ListItemIcon>
+                    <MuiListItemText 
+                      primary={<Typography color="primary.main" variant="subtitle2">Departments</Typography>}
+                      secondary={
+                        <>
+                          {!rawUserData.department || 
+                           (Array.isArray(rawUserData.department) && rawUserData.department.length === 0) ? (
+                            <Typography variant="body2" color="text.secondary">None assigned</Typography>
+                          ) : (
+                            <Typography variant="body2">
+                              {Array.isArray(rawUserData.department) 
+                                ? rawUserData.department.join(', ')
+                                : String(rawUserData.department)}
+                            </Typography>
+                          )}
+                        </>
+                      }
                     />
+                  </ListItem>
+                          
+                  <ListItem>
+                    <ListItemIcon>
+                      <GradeIcon color="primary" />
+                    </ListItemIcon>
+                    <MuiListItemText 
+                      primary={<Typography color="primary.main" variant="subtitle2">Grades</Typography>}
+                      secondary={
+                        <>
+                          {!rawUserData.grades || 
+                           (Array.isArray(rawUserData.grades) && rawUserData.grades.length === 0) ? (
+                            <Typography variant="body2" color="text.secondary">None assigned</Typography>
+                          ) : (
+                            <Typography variant="body2">
+                              {Array.isArray(rawUserData.grades) 
+                                ? rawUserData.grades.join(', ')
+                                : String(rawUserData.grades)}
+                            </Typography>
+                          )}
+                        </>
+                      }
+                    />
+                  </ListItem>
+                  
+                  <ListItem>
+                    <ListItemIcon>
+                      <SubjectIcon color="primary" />
+                    </ListItemIcon>
+                    <MuiListItemText 
+                      primary={<Typography color="primary.main" variant="subtitle2">Subjects</Typography>}
+                      secondary={
+                        <>
+                          {!rawUserData.subjects || 
+                           (Array.isArray(rawUserData.subjects) && rawUserData.subjects.length === 0) ? (
+                            <Typography variant="body2" color="text.secondary">None assigned</Typography>
+                          ) : (
+                            <Typography variant="body2">
+                              {Array.isArray(rawUserData.subjects) 
+                                ? rawUserData.subjects.join(', ')
+                                : String(rawUserData.subjects)}
+                            </Typography>
+                          )}
+                        </>
+                      }
+                    />
+                  </ListItem>
+                </List>
+              </Grid>
+            )}
+          </Grid>
+        )}
+      </Paper>
+      
+      {/* EDIT USER FORM */}
+      <Paper elevation={3} sx={{ p: 3, borderRadius: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+          <IconButton onClick={() => navigate('/user-accounts')} sx={{ mr: 2 }}>
+            <BackIcon />
+          </IconButton>
+          <Typography variant="h5" component="h1" sx={{ fontWeight: 600, color: '#011E41' }}>
+            Edit User
+          </Typography>
+        </Box>
+        
+        <Divider sx={{ mb: 3 }} />
+        
+        {loading && !formData.name && (
+          <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}>
+            <CircularProgress />
+            <Typography variant="body1" sx={{ ml: 2, color: 'text.secondary' }}>
+              Loading user data...
+            </Typography>
+          </Box>
+        )}
+        
+        {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
+        {success && <Alert severity="success" sx={{ mb: 3 }}>{success}</Alert>}
+        
+        {(!loading || formData.name) && (
+          <Box component="form" onSubmit={handleSubmit}>
+            <Grid container spacing={3}>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="Name"
+                  name="name"
+                  required
+                  value={formData.name}
+                  onChange={handleChange}
+                  variant="outlined"
+                  InputProps={{
+                    startAdornment: <UserIcon color="primary" sx={{ mr: 1 }} />
+                  }}
+                />
+              </Grid>
+              
+              {userData?.role === 'teacher' && (
+                <>
+                  <Grid item xs={12}>
+                    <FormControl fullWidth required>
+                      <InputLabel>Add Departments</InputLabel>
+                      <Select
+                        multiple
+                        name="departments"
+                        value={formData.departments}
+                        onChange={handleChange}
+                        label="Add Departments"
+                        disabled={departmentsLoading}
+                        renderValue={(selected) => (
+                          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                            {selected.map((value) => {
+                              const dept = departments.find(d => normalizeId(d.id) === normalizeId(value));
+                              return (
+                                <Chip 
+                                  key={value} 
+                                  label={dept ? dept.name : `ID: ${value}`} 
+                                  sx={{ bgcolor: '#e3f2fd' }}
+                                />
+                              );
+                            })}
+                          </Box>
+                        )}
+                      >
+                        {departmentsLoading ? (
+                          <MenuItem disabled>
+                            <CircularProgress size={20} sx={{ mr: 1 }} /> Loading...
+                          </MenuItem>
+                        ) : departments
+                            // Filter out departments that are already assigned to the user
+                            .filter(dept => {
+                              // Check if this department is already in the user's original departments
+                              const alreadyAssigned = originalUserData.departments.some(userDeptId => {
+                                // Try to match by ID or name
+                                return normalizeId(userDeptId) === normalizeId(dept.id) || 
+                                       normalizeId(userDeptId) === normalizeId(dept.name);
+                              });
+                              return !alreadyAssigned;
+                            })
+                            .map((dept) => (
+                              <MenuItem key={dept.id} value={dept.id}>
+                                <Checkbox checked={isDepartmentSelected(dept.id)} />
+                                <ListItemText primary={dept.name} />
+                              </MenuItem>
+                            ))}
+                      </Select>
+                      <FormHelperText>Select new departments to add to this user</FormHelperText>
+                    </FormControl>
                   </Grid>
                   
-                  <Grid item xs={12} sm={6}>
-                    <FormControl fullWidth required>
-                      <InputLabel>Role</InputLabel>
+                  <Grid item xs={12}>
+                    <FormControl fullWidth required disabled={!formData.departments.length || gradesLoading}>
+                      <InputLabel>Grades</InputLabel>
                       <Select
-                        value={role}
-                        onChange={(e) => setRole(e.target.value)}
-                        startAdornment={
-                          <InputAdornment position="start">
-                            {role === "Admin" ? 
-                              <AdminIcon sx={{ color: "#011E41" }} /> : 
-                              <TeacherIcon sx={{ color: "#011E41" }} />
-                            }
-                          </InputAdornment>
-                        }
+                        multiple
+                        name="grades"
+                        value={formData.grades}
+                        onChange={handleChange}
+                        label="Grades"
+                        renderValue={(selected) => (
+                          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                            {selected.map((value) => {
+                              const grade = grades.find(g => normalizeId(g.id) === normalizeId(value));
+                              return (
+                                <Chip 
+                                  key={value} 
+                                  label={grade ? `${grade.departmentName}: ${grade.name}` : value} 
+                                  sx={{ bgcolor: '#e3f2fd' }}
+                                />
+                              );
+                            })}
+                          </Box>
+                        )}
                       >
-                        <MenuItem value="Admin">Admin</MenuItem>
-                        <MenuItem value="Teacher">Teacher</MenuItem>
+                        {gradesLoading ? (
+                          <MenuItem disabled>
+                            <CircularProgress size={20} sx={{ mr: 1 }} /> Loading...
+                          </MenuItem>
+                        ) : grades.length === 0 ? (
+                          <MenuItem disabled>No grades available for selected departments</MenuItem>
+                        ) : (
+                          // Group grades by department
+                          Object.entries(
+                            grades.reduce((acc, grade) => {
+                              if (!acc[grade.departmentName]) acc[grade.departmentName] = [];
+                              acc[grade.departmentName].push(grade);
+                              return acc;
+                            }, {})
+                          ).map(([deptName, deptGrades]) => [
+                            <ListSubheader key={`header-${deptName}`} sx={{ bgcolor: '#f5f5f5', fontWeight: 'bold' }}>
+                              {deptName}
+                            </ListSubheader>,
+                            ...deptGrades.map((grade) => (
+                              <MenuItem key={grade.id} value={grade.id} sx={{ pl: 4 }}>
+                                <Checkbox checked={isGradeSelected(grade.id)} />
+                                <ListItemText primary={grade.name} />
+                              </MenuItem>
+                            ))
+                          ]).flat()
+                        )}
                       </Select>
                     </FormControl>
                   </Grid>
-                </Grid>
-                
-                <Box sx={{ mt: 3, display: "flex", justifyContent: "center" }}>
-                  <Button
-                    onClick={fetchUser}
-                    variant="contained"
-                    disabled={!searchQuery || !role || searchLoading}
-                    startIcon={searchLoading ? <CircularProgress size={20} color="inherit" /> : <SearchIcon />}
-                    sx={{
-                      bgcolor: "#011E41",
-                      color: "#FFFFFF",
-                      px: 4,
-                      py: 1.2,
-                      "&:hover": {
-                        bgcolor: "#032c5a",
-                      },
-                    }}
+                  
+                  <Grid item xs={12}>
+                    <FormControl fullWidth disabled={!formData.grades.length || subjectsLoading}>
+                      <InputLabel>Subjects</InputLabel>
+                      <Select
+                        multiple
+                        name="subjects"
+                        value={formData.subjects}
+                        onChange={handleChange}
+                        label="Subjects"
+                        renderValue={(selected) => (
+                          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                            {selected.map((value) => {
+                              const subject = subjects.find(s => normalizeId(s.id) === normalizeId(value));
+                              return (
+                                <Chip 
+                                  key={value} 
+                                  label={subject ? `${subject.departmentName} - ${subject.gradeName}: ${subject.name}` : value} 
+                                  sx={{ bgcolor: '#e3f2fd' }}
+                                />
+                              );
+                            })}
+                          </Box>
+                        )}
+                      >
+                        {subjectsLoading ? (
+                          <MenuItem disabled>
+                            <CircularProgress size={20} sx={{ mr: 1 }} /> Loading...
+                          </MenuItem>
+                        ) : subjects.length === 0 ? (
+                          <MenuItem disabled>No subjects available for selected grades</MenuItem>
+                        ) : (
+                          // Group subjects by department and grade
+                          Object.entries(
+                            subjects.reduce((acc, subject) => {
+                              const key = `${subject.departmentName}|${subject.gradeName}`;
+                              if (!acc[key]) acc[key] = [];
+                              acc[key].push(subject);
+                              return acc;
+                            }, {})
+                          ).map(([key, groupSubjects]) => {
+                            const [deptName, gradeName] = key.split('|');
+                            return [
+                              <ListSubheader key={`header-${key}`} sx={{ bgcolor: '#f5f5f5', fontWeight: 'bold' }}>
+                                {`${deptName} - ${gradeName}`}
+                              </ListSubheader>,
+                              ...groupSubjects.map((subject) => (
+                                <MenuItem key={subject.id} value={subject.id} sx={{ pl: 4 }}>
+                                  <Checkbox checked={isSubjectSelected(subject.id)} />
+                                  <ListItemText primary={subject.name} />
+                                </MenuItem>
+                              ))
+                            ];
+                          }).flat()
+                        )}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                </>
+              )}
+              
+              <Grid item xs={12} sx={{ mt: 2 }}>
+                <Divider sx={{ my: 2 }} />
+                <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
+                  <Button 
+                    variant="outlined" 
+                    onClick={() => navigate('/user-accounts')}
+                    disabled={loading}
                   >
-                    {searchLoading ? "Searching..." : "Find User"}
+                    Cancel
+                  </Button>
+                  <Button 
+                    type="submit" 
+                    variant="contained" 
+                    disabled={loading}
+                    sx={{ minWidth: 120, bgcolor: '#011E41' }}
+                  >
+                    {loading ? <CircularProgress size={24} /> : 'Save Changes'}
                   </Button>
                 </Box>
-              </CardContent>
-            </Card>
-
-            {/* Search Results List */}
-            {showSearchResults && searchResults.length > 0 && (
-              <Fade in={showSearchResults} timeout={500}>
-                <Card variant="outlined" sx={{ mb: 4, borderRadius: 2 }}>
-                  <CardContent>
-                    <Typography variant="h6" sx={{ mb: 3, color: "#011E41" }}>
-                      Search Results ({searchResults.length})
-                    </Typography>
-                    
-                    <Box sx={{ maxHeight: '400px', overflow: 'auto' }}>
-                      {searchResults.map((user) => (
-                        <Card 
-                          key={user.id} 
-                          variant="outlined" 
-                          sx={{ 
-                            mb: 2, 
-                            cursor: 'pointer',
-                            transition: 'all 0.2s ease',
-                            '&:hover': {
-                              backgroundColor: '#f5f5f5',
-                              transform: 'translateY(-2px)',
-                              boxShadow: 1
-                            }
-                          }}
-                          onClick={() => handleSelectUser(user)}
-                        >
-                          <CardContent sx={{ 
-                            py: 2,
-                            '&:last-child': { pb: 2 } // Override MUI default padding
-                          }}>
-                            <Grid container alignItems="center" spacing={2}>
-                              <Grid item>
-                                <Avatar 
-                                  sx={{ 
-                                    bgcolor: role === "Admin" ? "#1976d2" : "#2e7d32",
-                                    width: 45,
-                                    height: 45
-                                  }}
-                                >
-                                  {getInitials(user.name)}
-                                </Avatar>
-                              </Grid>
-                              <Grid item xs>
-                                <Typography variant="subtitle1" component="div" fontWeight="500">
-                                  {user.name}
-                                </Typography>
-                                <Typography variant="body2" color="text.secondary">
-                                  {user.email}
-                                </Typography>
-                                {user.department && (
-                                  <Box sx={{ mt: 0.5 }}>
-                                    <Chip 
-                                      label={Array.isArray(user.department) ? 
-                                        user.department.join(', ') : user.department}
-                                      size="small"
-                                      sx={{ 
-                                        bgcolor: '#f1f8e9',
-                                        fontWeight: 400,
-                                        fontSize: '0.75rem'
-                                      }}
-                                    />
-                                  </Box>
-                                )}
-                              </Grid>
-                              <Grid item>
-                                <Button 
-                                  variant="outlined" 
-                                  size="small"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleSelectUser(user);
-                                  }}
-                                >
-                                  Select
-                                </Button>
-                              </Grid>
-                            </Grid>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </Box>
-                  </CardContent>
-                </Card>
-              </Fade>
-            )}
-            
-            {/* Rest of the component remains the same */}
-            
-            {/* User Details Form */}
-            {userData && (
-              <Fade in={userData !== null} timeout={500}>
-                <Card variant="outlined" sx={{ borderRadius: 2 }}>
-                  <CardContent>
-                    <Box sx={{ display: "flex", alignItems: "center", mb: 3 }}>
-                      <Avatar 
-                        sx={{ 
-                          bgcolor: role === "Admin" ? "#1976d2" : "#2e7d32",
-                          width: 60,
-                          height: 60,
-                          fontSize: "1.5rem",
-                          mr: 2
-                        }}
-                      >
-                        {getInitials(userData.name)}
-                      </Avatar>
-                      <Box>
-                        <Typography variant="h5" sx={{ fontWeight: 500 }}>
-                          {userData.name}
-                        </Typography>
-                        <Box sx={{ display: "flex", alignItems: "center", mt: 0.5 }}>
-                          <Chip 
-                            icon={role === "Admin" ? <AdminIcon /> : <TeacherIcon />}
-                            label={role}
-                            size="small"
-                            sx={{ 
-                              bgcolor: role === "Admin" ? "#e3f2fd" : "#e8f5e9",
-                              color: role === "Admin" ? "#1976d2" : "#2e7d32",
-                              mr: 1 
-                            }} 
-                          />
-                          <Typography variant="body2" color="text.secondary">
-                            {userData.email}
-                          </Typography>
-                        </Box>
-                      </Box>
-                    </Box>
-                    
-                    <Divider sx={{ mb: 3 }} />
-                    
-                    <Grid container spacing={3}>
-                      <Grid item xs={12}>
-                        <TextField
-                          name="name"
-                          label="Full Name"
-                          value={userData.name || ""}
-                          onChange={handleChange}
-                          required
-                          fullWidth
-                          InputProps={{
-                            startAdornment: (
-                              <InputAdornment position="start">
-                                <PersonIcon sx={{ color: "#011E41" }} />
-                              </InputAdornment>
-                            ),
-                          }}
-                        />
-                      </Grid>
-                      
-                      {role === "Teacher" && (
-                        <>
-                          <Grid item xs={12} md={4}>
-                            <TextField
-                              name="departmentString"
-                              label="Departments"
-                              value={userData.departmentString || ""}
-                              onChange={handleChange}
-                              fullWidth
-                              helperText="Separate multiple departments with commas"
-                              InputProps={{
-                                startAdornment: (
-                                  <InputAdornment position="start">
-                                    <DepartmentIcon sx={{ color: "#011E41" }} />
-                                  </InputAdornment>
-                                ),
-                              }}
-                            />
-                          </Grid>
-                          
-                          <Grid item xs={12} md={4}>
-                            <TextField
-                              name="gradesString"
-                              label="Grades"
-                              value={userData.gradesString || ""}
-                              onChange={handleChange}
-                              fullWidth
-                              helperText="Separate multiple grades with commas"
-                              InputProps={{
-                                startAdornment: (
-                                  <InputAdornment position="start">
-                                    <TeacherIcon sx={{ color: "#011E41" }} />
-                                  </InputAdornment>
-                                ),
-                              }}
-                            />
-                          </Grid>
-                          
-                          <Grid item xs={12} md={4}>
-                            <TextField
-                              name="subjectsString"
-                              label="Subjects"
-                              value={userData.subjectsString || ""}
-                              onChange={handleChange}
-                              fullWidth
-                              helperText="Separate multiple subjects with commas"
-                              InputProps={{
-                                startAdornment: (
-                                  <InputAdornment position="start">
-                                    <SubjectIcon sx={{ color: "#011E41" }} />
-                                  </InputAdornment>
-                                ),
-                              }}
-                            />
-                          </Grid>
-                        </>
-                      )}
-                    </Grid>
-                    
-                    <Box 
-                      sx={{ 
-                        mt: 4, 
-                        display: "flex", 
-                        flexDirection: { xs: "column", sm: "row" },
-                        gap: 2,
-                        justifyContent: "space-between" 
-                      }}
-                    >
-                      <Button
-                        variant="contained"
-                        onClick={handleUpdate}
-                        disabled={!isChanged || loading}
-                        startIcon={loading ? <CircularProgress size={20} color="inherit" /> : <SaveIcon />}
-                        sx={{
-                          bgcolor: "#4caf50",
-                          "&:hover": { bgcolor: "#388e3c" },
-                          flex: { xs: "1", sm: "initial" },
-                          order: { xs: 1, sm: 1 },
-                        }}
-                      >
-                        {loading ? "Saving..." : "Save Changes"}
-                      </Button>
-                      
-                      <Box 
-                        sx={{ 
-                          display: "flex", 
-                          gap: 2,
-                          flexDirection: { xs: "column", sm: "row" },
-                          flex: { xs: "1", sm: "initial" },
-                          order: { xs: 3, sm: 2 },
-                        }}
-                      >
-                        <Tooltip title="Reset password to 'abc.123'">
-                          <Button
-                            variant="outlined"
-                            onClick={() => setResetDialog(true)}
-                            disabled={loading}
-                            startIcon={<ResetIcon />}
-                            color="primary"
-                            sx={{ flex: { xs: "1", sm: "initial" } }}
-                          >
-                            Reset Password
-                          </Button>
-                        </Tooltip>
-                        
-                        <Button
-                          variant="contained"
-                          onClick={() => setDeleteDialog(true)}
-                          disabled={loading}
-                          startIcon={<DeleteIcon />}
-                          sx={{
-                            bgcolor: "#f44336",
-                            "&:hover": { bgcolor: "#d32f2f" },
-                            flex: { xs: "1", sm: "initial" },
-                          }}
-                        >
-                          Delete User
-                        </Button>
-                      </Box>
-                    </Box>
-                  </CardContent>
-                </Card>
-              </Fade>
-            )}
+              </Grid>
+            </Grid>
           </Box>
-        </Paper>
-      </Fade>
-      
-      {/* Delete Confirmation Dialog */}
-      <Dialog
-        open={deleteDialog}
-        onClose={() => setDeleteDialog(false)}
-      >
-        <DialogTitle sx={{ display: "flex", alignItems: "center" }}>
-          <WarningIcon sx={{ color: "#f44336", mr: 1 }} />
-          Confirm User Deletion
-        </DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            Are you sure you want to delete this user? This action will:
-            <ul>
-              <li>Remove the user data from the database</li>
-              <li>This action cannot be undone</li>
-            </ul>
-            <Alert severity="warning" sx={{ mt: 2 }}>
-              Note: This will only delete the user from Firestore. To fully delete the user's authentication account, you must use Firebase Console.
-            </Alert>
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setDeleteDialog(false)} disabled={loading}>
-            Cancel
-          </Button>
-          <Button 
-            onClick={deleteUser} 
-            variant="contained"
-            disabled={loading}
-            sx={{ bgcolor: "#f44336", "&:hover": { bgcolor: "#d32f2f" } }}
-          >
-            {loading ? <CircularProgress size={24} /> : "Delete User Data"}
-          </Button>
-        </DialogActions>
-      </Dialog>
-      
-      {/* Reset Password Confirmation Dialog */}
-      <Dialog
-        open={resetDialog}
-        onClose={() => setResetDialog(false)}
-      >
-        <DialogTitle sx={{ display: "flex", alignItems: "center" }}>
-          <ResetIcon sx={{ color: "#1976d2", mr: 1 }} />
-          Password Reset Limitation
-        </DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            <Alert severity="info" sx={{ mb: 2 }}>
-              Client-side password resets for other users are not supported in Firebase without a backend service.
-            </Alert>
-            
-            To reset user passwords, you have these options:
-            <ul>
-              <li>Use the Firebase Console (Authentication section)</li>
-              <li>Set up Firebase Admin SDK in a server-side application</li>
-              <li>Implement Firebase Cloud Functions (recommended)</li>
-              <li>Create a custom server endpoint that uses the Admin SDK</li>
-            </ul>
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setResetDialog(false)}>
-            Understand
-          </Button>
-        </DialogActions>
-      </Dialog>
-      
-      {/* Notifications */}
-      <Snackbar
-        open={notification.open}
-        autoHideDuration={6000}
-        onClose={handleCloseNotification}
-        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-      >
-        <Alert 
-          onClose={handleCloseNotification} 
-          severity={notification.severity}
-          variant="filled" 
-          sx={{ width: '100%' }}
-        >
-          {notification.message}
-        </Alert>
-      </Snackbar>
+        )}
+      </Paper>
     </Container>
   );
 };

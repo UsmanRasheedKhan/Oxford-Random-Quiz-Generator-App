@@ -47,6 +47,19 @@ const GenerateQuiz = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [step, setStep] = useState(1); // 1: selection, 2: options, 3: quiz
+
+  const [printDialogOpen, setPrintDialogOpen] = useState(false);
+  const [quizHeaders, setQuizHeaders] = useState({ title: "", description: "" });
+  const [showTopicNames, setShowTopicNames] = useState(true);
+
+  const handlePrintQuiz = () => {
+    window.print(); // Directly trigger the print functionality
+  };
+
+  const handlePrint = () => {
+    setPrintDialogOpen(false);
+    window.print(); // Trigger print
+  };
   
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -415,7 +428,9 @@ const GenerateQuiz = () => {
           "questions"
         );
         
-        const questionsSnapshot = await getDocs(questionsRef);
+        // Filter to only get approved questions
+        const questionsQuery = query(questionsRef, where("status", "==", "approved"));
+        const questionsSnapshot = await getDocs(questionsQuery);
         const questions = questionsSnapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data(),
@@ -425,6 +440,20 @@ const GenerateQuiz = () => {
         
         allQuestions.push(...questions);
       }
+      
+      // Add this check after all questions have been fetched
+
+      // Check if we have any approved questions
+      if (allQuestions.length === 0) {
+        setError(
+          "No approved questions found. Questions must be approved by an administrator " +
+          "before they can be used in quizzes. Please try again later or contact an administrator."
+        );
+        setLoading(false);
+        return;
+      }
+
+      // Continue with generating the quiz if we have approved questions...
       
       // Randomly select questions up to the requested count
       let selectedQuestions = [];
@@ -669,7 +698,8 @@ const renderTopicSelection = () => {
   return null;
 };
 
-// Fix renderQuestionCount
+// Update the renderQuestionCount function
+
 const renderQuestionCount = () => (
   <Paper elevation={3} sx={{ p: 3, mb: 4 }}>
     <Typography variant="h6" sx={{ mb: 2, color: "#011E41" }}>Number of Questions</Typography>
@@ -681,13 +711,19 @@ const renderQuestionCount = () => (
       inputProps={{ min: 1 }}
       sx={{ width: 200 }}
     />
+    
+    {/* Add this warning message */}
+    <Typography variant="body2" sx={{ mt: 2, color: 'text.secondary' }}>
+      If fewer approved questions are available than your requested count, 
+      all available approved questions will be included.
+    </Typography>
   </Paper>
 );
 
 // Fix renderGeneratedQuiz
 const renderGeneratedQuiz = () => {
   if (!generatedQuiz) return null;
-  
+
   return (
     <Box>
       <Paper elevation={3} sx={{ p: 3, mb: 4 }}>
@@ -711,74 +747,90 @@ const renderGeneratedQuiz = () => {
           <strong>Questions:</strong> {generatedQuiz.questions.length}
         </Typography>
       </Paper>
-      
+
       <Typography variant="h6" gutterBottom sx={{ mt: 4, mb: 2, color: "#011E41" }}>
         Quiz Questions
       </Typography>
-      
+
       {generatedQuiz.questions.map((question, index) => (
         <Card key={question.id} sx={{ mb: 3, boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }}>
           <CardHeader
             title={`Question ${index + 1}`}
-            subheader={`${question.chapterName} > ${question.topicName}`}
+            subheader={showTopicNames ? `${question.chapterName} > ${question.topicName}` : null}
             avatar={<QuizIcon sx={{ color: "#011E41" }} />}
           />
           <CardContent>
             <Typography variant="body1" gutterBottom sx={{ fontWeight: 'medium' }}>
               {question.text}
             </Typography>
-            
+
             {question.type === "multiple" && (
               <List dense>
                 {question.options.map((option, optIndex) => (
                   <ListItem key={optIndex}>
-                    <Radio
-                      checked={question.correctOption === optIndex}
-                      disabled
-                    />
+                    <Radio disabled /> {/* Do not show the correct option */}
                     <ListItemText primary={option} />
                   </ListItem>
                 ))}
               </List>
             )}
-            
+
             {question.type === "short" && (
               <Box sx={{ mt: 1, fontStyle: 'italic', color: 'text.secondary' }}>
                 <Typography variant="body2">
-                  <strong>Correct answer:</strong> {question.shortAnswer}
+                  <strong>Answer:</strong> __________________________
                 </Typography>
               </Box>
             )}
-            
+
             {question.type === "truefalse" && (
               <Box sx={{ mt: 1, fontStyle: 'italic', color: 'text.secondary' }}>
                 <Typography variant="body2">
-                  <strong>Correct answer:</strong> {question.isTrueAnswer ? "True" : "False"}
+                  <strong>Answer:</strong> True / False
                 </Typography>
               </Box>
             )}
           </CardContent>
         </Card>
       ))}
-      
+
       <Box sx={{ mt: 4, mb: 2, display: 'flex', justifyContent: 'center' }}>
         <Button
           variant="contained"
           color="primary"
-          onClick={() => window.print()}
+          onClick={handlePrintQuiz}
           sx={{ mr: 2, bgcolor: '#011E41' }}
         >
           Print Quiz
         </Button>
         <Button
           variant="outlined"
-          onClick={() => setStep(1)}
+          onClick={handlePrintAnswerKey}
         >
-          Create Another Quiz
+          Print Answer Key
         </Button>
       </Box>
     </Box>
   );
+};
+
+const handlePrintAnswerKey = () => {
+  const answerKey = generatedQuiz.questions.map((question, index) => ({
+    number: index + 1,
+    text: question.text,
+    answer:
+      question.type === "multiple"
+        ? question.options[question.correctOption]
+        : question.type === "short"
+        ? question.shortAnswer
+        : question.isTrueAnswer
+        ? "True"
+        : "False",
+    topic: `${question.chapterName} > ${question.topicName}`,
+  }));
+
+  console.log("Answer Key:", answerKey); // Replace with actual print logic
+  // You can render the answer key in a new window or a printable section
 };
 
 // Fix the return statement
@@ -814,6 +866,12 @@ return (
       {!loading && step === 2 && (
         <>
           {renderQuizTypeSelection()}
+          <Alert severity="info" sx={{ mb: 3 }}>
+            <Typography variant="body2">
+              <strong>Note:</strong> Only questions approved by administrators will be included in the quiz. 
+              If you've recently submitted questions, they may not appear until they've been reviewed.
+            </Typography>
+          </Alert>
           {renderTopicSelection()}
           {renderQuestionCount()}
           
@@ -836,7 +894,11 @@ return (
         </>
       )}
       
-      {!loading && step === 3 && renderGeneratedQuiz()}
+      {!loading && step === 3 && (
+        <div id="quiz-section">
+          {renderGeneratedQuiz()}
+        </div>
+      )}
     </Box>
   </Container>
 );
