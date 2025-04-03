@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { auth, db } from "../firebase";
 import { doc, getDocs, updateDoc, query, collection, where } from "firebase/firestore";
 import { signInWithEmailAndPassword, updatePassword } from "firebase/auth";
+import { useNavigate } from "react-router-dom";
 import {
   Box,
   Typography,
@@ -35,7 +36,8 @@ import {
   VisibilityOff as VisibilityOffIcon,
   AdminPanelSettings as AdminIcon,
   School as TeacherIcon,
-  Badge as RoleIcon
+  Badge as RoleIcon,
+  Home as HomeIcon
 } from "@mui/icons-material";
 
 const ProfileScreen = () => {
@@ -62,6 +64,7 @@ const ProfileScreen = () => {
   });
 
   const currentUser = auth.currentUser;
+  const navigate = useNavigate();
 
   // Get initial letters for avatar
   const getInitials = (name) => {
@@ -266,6 +269,15 @@ const ProfileScreen = () => {
     setNotification({...notification, open: false});
   };
 
+  const navigateToDashboard = () => {
+    const role = localStorage.getItem("role");
+    if (role === "Admin") {
+      navigate('/admin');
+    } else {
+      navigate('/teacher');
+    }
+  };
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh' }}>
@@ -333,9 +345,25 @@ const ProfileScreen = () => {
             </Avatar>
             
             <Box sx={{ flex: 1 }}>
-              <Typography variant="h4" sx={{ mb: 1, fontWeight: 600 }}>
-                {userInfo.name}
-              </Typography>
+              <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <Typography variant="h4" sx={{ mb: 1, fontWeight: 600 }}>
+                  {userInfo.name}
+                </Typography>
+                
+                {/* Add Home Icon Button */}
+                <IconButton 
+                  onClick={navigateToDashboard}
+                  sx={{ 
+                    bgcolor: 'rgba(255, 255, 255, 0.2)', 
+                    color: 'white', 
+                    '&:hover': { 
+                      bgcolor: 'rgba(255, 255, 255, 0.3)' 
+                    }
+                  }}
+                >
+                  <HomeIcon />
+                </IconButton>
+              </Box>
               
               <Box sx={{ display: "flex", alignItems: "center", mb: 1 }}>
                 <EmailIcon sx={{ mr: 1, fontSize: "1rem" }} />

@@ -11,8 +11,12 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ChapterIcon from '@mui/icons-material/MenuBook';
 import TopicIcon from '@mui/icons-material/Topic';
 import QuizIcon from '@mui/icons-material/Quiz';
+import { useNavigate } from "react-router-dom"; // Make sure this import exists
+import ArrowBackIcon from '@mui/icons-material/ArrowBack'; // Add this import
 
 const ViewQuestions = () => {
+  const navigate = useNavigate(); // Add this hook
+  
   // Selection states
   const [departments, setDepartments] = useState([]);
   const [grades, setGrades] = useState([]);
@@ -587,184 +591,196 @@ const ViewQuestions = () => {
   };
 
   // Update the renderQuestion function
-const renderQuestion = (question, chapterId, topicId) => {
-  // Get comments for this question
-  const questionComments = existingComments[question.id] || [];
-  
-  // Check if the current user has already commented
-  const userHasComment = questionComments.some(
-    comment => comment.role === "admin"  // Change this to use actual user ID in a real app
-  );
-  
-  return (
-    <Card key={question.id} sx={{ mb: 2, boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }}>
-      <CardContent>
-        <Typography variant="h6" gutterBottom>
-          Question: {question.text}
-        </Typography>
-        
-        {question.type === "multiple" && (
-          <Box sx={{ ml: 2, mt: 1 }}>
-            <Typography variant="subtitle2">Options:</Typography>
-            <List>
-              {question.options.map((option, index) => (
-                <ListItem key={index}>
-                  <Typography 
-                    variant="body2" 
-                    sx={{ 
-                      fontWeight: question.correctOption === index ? 'bold' : 'normal',
-                      color: question.correctOption === index ? 'success.main' : 'text.primary'
-                    }}
-                  >
-                    {index + 1}. {option} {question.correctOption === index && " (Correct)"}
-                  </Typography>
-                </ListItem>
-              ))}
-            </List>
-          </Box>
-        )}
-        
-        {question.type === "short" && (
-          <Box sx={{ ml: 2, mt: 1 }}>
-            <Typography variant="subtitle2">
-              Correct Answer: <span style={{ fontWeight: 'bold' }}>{question.shortAnswer}</span>
-            </Typography>
-          </Box>
-        )}
-        
-        {question.type === "truefalse" && (
-          <Box sx={{ ml: 2, mt: 1 }}>
-            <Typography variant="subtitle2">
-              Correct Answer: <span style={{ fontWeight: 'bold' }}>{question.isTrueAnswer ? "True" : "False"}</span>
-            </Typography>
-          </Box>
-        )}
-        
-        <Divider sx={{ my: 2 }} />
-        
-        {/* Display existing comments */}
-        {questionComments.length > 0 && (
-          <Box sx={{ mb: 3 }}>
-            <Typography variant="subtitle2" sx={{ mb: 2 }}>
-              Comments:
-            </Typography>
-            
-            {questionComments.map(comment => (
-              <Paper key={comment.id} elevation={1} sx={{ p: 2, mb: 2, bgcolor: '#f8f9fa' }}>
-                {editingComment && 
-                 editingComment.questionId === question.id && 
-                 editingComment.commentId === comment.id ? (
-                  // Edit mode
-                  <Box>
-                    <TextField
-                      multiline
-                      rows={2}
-                      fullWidth
-                      variant="outlined"
-                      value={editCommentText}
-                      onChange={(e) => setEditCommentText(e.target.value)}
-                      sx={{ mb: 1 }}
-                    />
-                    <Box sx={{ display: 'flex', gap: 1 }}>
-                      <Button 
-                        size="small" 
-                        variant="contained" 
-                        onClick={() => saveEditedComment(question.id, comment.id, chapterId, topicId)}
-                      >
-                        Save
-                      </Button>
-                      <Button 
-                        size="small" 
-                        variant="outlined" 
-                        onClick={cancelEditing}
-                      >
-                        Cancel
-                      </Button>
-                    </Box>
-                  </Box>
-                ) : (
-                  // View mode
-                  <Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                      <Typography variant="body2" fontWeight="bold">
-                        {comment.author || "Unknown"} ({comment.role || "user"})
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {comment.timestamp?.toLocaleString?.() || "Unknown date"}
-                        {comment.edited && " (edited)"}
-                      </Typography>
-                    </Box>
-                    
-                    <Typography variant="body2">
-                      {comment.text}
+  const renderQuestion = (question, chapterId, topicId) => {
+    // Get comments for this question
+    const questionComments = existingComments[question.id] || [];
+    
+    // Check if the current user has already commented
+    const userHasComment = questionComments.some(
+      comment => comment.role === "admin"  // Change this to use actual user ID in a real app
+    );
+    
+    return (
+      <Card key={question.id} sx={{ mb: 2, boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }}>
+        <CardContent>
+          <Typography variant="h6" gutterBottom>
+            Question: {question.text}
+          </Typography>
+          
+          {question.type === "multiple" && (
+            <Box sx={{ ml: 2, mt: 1 }}>
+              <Typography variant="subtitle2">Options:</Typography>
+              <List>
+                {question.options.map((option, index) => (
+                  <ListItem key={index}>
+                    <Typography 
+                      variant="body2" 
+                      sx={{ 
+                        fontWeight: question.correctOption === index ? 'bold' : 'normal',
+                        color: question.correctOption === index ? 'success.main' : 'text.primary'
+                      }}
+                    >
+                      {index + 1}. {option} {question.correctOption === index && " (Correct)"}
                     </Typography>
-                    
-                    {/* Only show edit/delete for the user's own comments */}
-                    {comment.role === "admin" && (  // Replace with actual user role check
-                      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
+                  </ListItem>
+                ))}
+              </List>
+            </Box>
+          )}
+          
+          {question.type === "short" && (
+            <Box sx={{ ml: 2, mt: 1 }}>
+              <Typography variant="subtitle2">
+                Correct Answer: <span style={{ fontWeight: 'bold' }}>{question.shortAnswer}</span>
+              </Typography>
+            </Box>
+          )}
+          
+          {question.type === "truefalse" && (
+            <Box sx={{ ml: 2, mt: 1 }}>
+              <Typography variant="subtitle2">
+                Correct Answer: <span style={{ fontWeight: 'bold' }}>{question.isTrueAnswer ? "True" : "False"}</span>
+              </Typography>
+            </Box>
+          )}
+          
+          <Divider sx={{ my: 2 }} />
+          
+          {/* Display existing comments */}
+          {questionComments.length > 0 && (
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="subtitle2" sx={{ mb: 2 }}>
+                Comments:
+              </Typography>
+              
+              {questionComments.map(comment => (
+                <Paper key={comment.id} elevation={1} sx={{ p: 2, mb: 2, bgcolor: '#f8f9fa' }}>
+                  {editingComment && 
+                   editingComment.questionId === question.id && 
+                   editingComment.commentId === comment.id ? (
+                    // Edit mode
+                    <Box>
+                      <TextField
+                        multiline
+                        rows={2}
+                        fullWidth
+                        variant="outlined"
+                        value={editCommentText}
+                        onChange={(e) => setEditCommentText(e.target.value)}
+                        sx={{ mb: 1 }}
+                      />
+                      <Box sx={{ display: 'flex', gap: 1 }}>
                         <Button 
                           size="small" 
-                          variant="text" 
-                          onClick={() => startEditingComment(question.id, comment.id, comment.text)}
-                          sx={{ minWidth: 'auto', mr: 1 }}
+                          variant="contained" 
+                          onClick={() => saveEditedComment(question.id, comment.id, chapterId, topicId)}
                         >
-                          Edit
+                          Save
                         </Button>
                         <Button 
                           size="small" 
-                          color="error" 
-                          variant="text" 
-                          onClick={() => deleteComment(question.id, comment.id, chapterId, topicId)}
-                          sx={{ minWidth: 'auto' }}
+                          variant="outlined" 
+                          onClick={cancelEditing}
                         >
-                          Delete
+                          Cancel
                         </Button>
                       </Box>
-                    )}
-                  </Box>
-                )}
-              </Paper>
-            ))}
-          </Box>
-        )}
-        
-        {/* Show comment form only if the user hasn't already commented */}
-        {!userHasComment && (
-          <Box>
-            <Typography variant="subtitle2">Leave a comment:</Typography>
-            <TextField
-              multiline
-              rows={2}
-              fullWidth
-              variant="outlined"
-              placeholder="Enter your comment here..."
-              value={comments[question.id] || ""}
-              onChange={(e) => handleCommentChange(question.id, e.target.value)}
-              sx={{ mt: 1, mb: 2 }}
-            />
-            
-            <Button
-              variant="contained"
-              color="primary"
-              size="small"
-              onClick={() => submitComment(question, chapterId, topicId)}
-              disabled={!comments[question.id]}
-              sx={{ bgcolor: "#011E41" }}
-            >
-              Submit Comment
-            </Button>
-          </Box>
-        )}
-      </CardContent>
-    </Card>
-  );
-};
+                    </Box>
+                  ) : (
+                    // View mode
+                    <Box>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                        <Typography variant="body2" fontWeight="bold">
+                          {comment.author || "Unknown"} ({comment.role || "user"})
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {comment.timestamp?.toLocaleString?.() || "Unknown date"}
+                          {comment.edited && " (edited)"}
+                        </Typography>
+                      </Box>
+                      
+                      <Typography variant="body2">
+                        {comment.text}
+                      </Typography>
+                      
+                      {/* Only show edit/delete for the user's own comments */}
+                      {comment.role === "admin" && (  // Replace with actual user role check
+                        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
+                          <Button 
+                            size="small" 
+                            variant="text" 
+                            onClick={() => startEditingComment(question.id, comment.id, comment.text)}
+                            sx={{ minWidth: 'auto', mr: 1 }}
+                          >
+                            Edit
+                          </Button>
+                          <Button 
+                            size="small" 
+                            color="error" 
+                            variant="text" 
+                            onClick={() => deleteComment(question.id, comment.id, chapterId, topicId)}
+                            sx={{ minWidth: 'auto' }}
+                          >
+                            Delete
+                          </Button>
+                        </Box>
+                      )}
+                    </Box>
+                  )}
+                </Paper>
+              ))}
+            </Box>
+          )}
+          
+          {/* Show comment form only if the user hasn't already commented */}
+          {!userHasComment && (
+            <Box>
+              <Typography variant="subtitle2">Leave a comment:</Typography>
+              <TextField
+                multiline
+                rows={2}
+                fullWidth
+                variant="outlined"
+                placeholder="Enter your comment here..."
+                value={comments[question.id] || ""}
+                onChange={(e) => handleCommentChange(question.id, e.target.value)}
+                sx={{ mt: 1, mb: 2 }}
+              />
+              
+              <Button
+                variant="contained"
+                color="primary"
+                size="small"
+                onClick={() => submitComment(question, chapterId, topicId)}
+                disabled={!comments[question.id]}
+                sx={{ bgcolor: "#011E41" }}
+              >
+                Submit Comment
+              </Button>
+            </Box>
+          )}
+        </CardContent>
+      </Card>
+    );
+  };
 
   return (
     <Box sx={{ m: 4 }}>
-      <Typography variant="h4" align="center" color="#011E41" gutterBottom>
-        Admin Question Review
-      </Typography>
+      {/* Header with back button */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Typography variant="h4" color="#011E41">
+          Admin Question Review
+        </Typography>
+        
+        <Button
+          variant="outlined"
+          startIcon={<ArrowBackIcon />}
+          onClick={() => navigate('/admin')}
+          sx={{ ml: 2 }}
+        >
+          Back to Dashboard
+        </Button>
+      </Box>
       
       {error && (
         <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>

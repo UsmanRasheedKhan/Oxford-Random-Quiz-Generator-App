@@ -51,6 +51,7 @@ import {
   Visibility as VisibilityIcon,
   Person as PersonIcon,
   Close as CloseIcon,
+  Save as SaveIcon,
 } from '@mui/icons-material';
 import { db } from '../../firebase';
 import { collection, query, where, getDocs, doc, updateDoc, getDoc, writeBatch, collectionGroup, setDoc } from 'firebase/firestore';
@@ -80,6 +81,12 @@ const ApprovalRequests = () => {
   const [currentQuestion, setCurrentQuestion] = useState(null);
   const [approveDialog, setApproveDialog] = useState(false);
   const [approveLoading, setApproveLoading] = useState(false);
+
+  // Add these new states at the beginning of the component
+  const [editedQuestionText, setEditedQuestionText] = useState('');
+  const [editedAnswerText, setEditedAnswerText] = useState('');
+  const [isEditing, setIsEditing] = useState(false);
+  const [saveLoading, setSaveLoading] = useState(false);
   
   // Helper function to format display names
   const formatDisplayName = (name) => {
@@ -320,8 +327,8 @@ const ApprovalRequests = () => {
   
   // Alternative hierarchical query approach
   const fetchQuestionsHierarchical = async () => {
-    if (!selectedDepartment || !selectedGrade || !selectedBook) {
-      setError("Please select department, grade, and book to view approval requests");
+    if (!selectedDepartment || !selectedGrade) {
+      setError("Please select department and grade to view approval requests");
       return;
     }
     
@@ -332,65 +339,117 @@ const ApprovalRequests = () => {
     setSelectAll(false);
     
     try {
-      console.log(`Fetching questions for book: ${selectedBook}`);
+      console.log(`Fetching questions for ${selectedBook === 'ALL_BOOKS' ? 'all books' : `book: ${selectedBook}`}`);
       
-      // First, get all chapters for this book
-      const chaptersPath = `books/${selectedDepartment}/grades/${selectedGrade}/books/${selectedBook}/chapters`;
-      const chaptersSnapshot = await getDocs(collection(db, chaptersPath));
-      
-      if (chaptersSnapshot.empty) {
-        setError("No chapters found for this book");
-        setLoading(false);
-        return;
-      }
-      
-      // For each chapter, get topics
       let allQuestions = [];
       
-      for (const chapterDoc of chaptersSnapshot.docs) {
-        const chapterId = chapterDoc.id;
-        const topicsPath = `${chaptersPath}/${chapterId}/topics`;
-        const topicsSnapshot = await getDocs(collection(db, topicsPath));
+      // If "All Books" is selected, process all books for the department and grade
+      if (selectedBook === 'ALL_BOOKS') {
+        console.log(`Processing all books for ${selectedDepartment}, grade ${selectedGrade}`);
         
-        if (!topicsSnapshot.empty) {
-          // For each topic, get questions
-          for (const topicDoc of topicsSnapshot.docs) {
-            const topicId = topicDoc.id;
-            const questionsPath = `${topicsPath}/${topicId}/questions`;
-            
-            // Query for pending questions
-            const questionsSnapshot = await getDocs(
-              query(collection(db, questionsPath), where('status', '==', 'pending'))
-            );
-            
-            if (!questionsSnapshot.empty) {
-              // Map questions and include path
-              const questionDocs = questionsSnapshot.docs.map(doc => ({
-                id: doc.id,
-                path: doc.ref.path,
-                ...doc.data()
-              }));
+        // Process each book
+        for (const bookObj of filteredBooks) {
+          const bookId = bookObj.id;
+          
+          // Get all chapters for this book
+          const chaptersPath = `books/${selectedDepartment}/grades/${selectedGrade}/books/${bookId}/chapters`;
+          const chaptersSnapshot = await getDocs(collection(db, chaptersPath));
+          
+          if (!chaptersSnapshot.empty) {
+            // For each chapter, get topics
+            for (const chapterDoc of chaptersSnapshot.docs) {
+              const chapterId = chapterDoc.id;
+              const topicsPath = `${chaptersPath}/${chapterId}/topics`;
+              const topicsSnapshot = await getDocs(collection(db, topicsPath));
               
-              allQuestions = [...allQuestions, ...questionDocs];
+              if (!topicsSnapshot.empty) {
+                // For each topic, get questions
+                for (const topicDoc of topicsSnapshot.docs) {
+                  const topicId = topicDoc.id;
+                  const questionsPath = `${topicsPath}/${topicId}/questions`;
+                  
+                  // Query for pending questions
+                  const questionsSnapshot = await getDocs(
+                    query(collection(db, questionsPath), where('status', '==', 'pending'))
+                  );
+                  
+                  if (!questionsSnapshot.empty) {
+                    // Map questions and include path and book info
+                    const questionDocs = questionsSnapshot.docs.map(doc => ({
+                      id: doc.id,
+                      path: doc.ref.path,
+                      book: bookId,
+                      ...doc.data()
+                    }));
+                    
+                    allQuestions = [...allQuestions, ...questionDocs];
+                  }
+                }
+              }
+            }
+          }
+        }
+      } else {
+        // Original logic for a single book
+        // First, get all chapters for this book
+        const chaptersPath = `books/${selectedDepartment}/grades/${selectedGrade}/books/${selectedBook}/chapters`;
+        const chaptersSnapshot = await getDocs(collection(db, chaptersPath));
+        
+        if (chaptersSnapshot.empty) {
+          setError("No chapters found for this book");
+          setLoading(false);
+          return;
+        }
+        
+        // For each chapter, get topics
+        for (const chapterDoc of chaptersSnapshot.docs) {
+          const chapterId = chapterDoc.id;
+          const topicsPath = `${chaptersPath}/${chapterId}/topics`;
+          const topicsSnapshot = await getDocs(collection(db, topicsPath));
+          
+          if (!topicsSnapshot.empty) {
+            // For each topic, get questions
+            for (const topicDoc of topicsSnapshot.docs) {
+              const topicId = topicDoc.id;
+              const questionsPath = `${topicsPath}/${topicId}/questions`;
+              
+              // Query for pending questions
+              const questionsSnapshot = await getDocs(
+                query(collection(db, questionsPath), where('status', '==', 'pending'))
+              );
+              
+              if (!questionsSnapshot.empty) {
+                // Map questions and include path
+                const questionDocs = questionsSnapshot.docs.map(doc => ({
+                  id: doc.id,
+                  path: doc.ref.path,
+                  book: selectedBook,
+                  ...doc.data()
+                }));
+                
+                allQuestions = [...allQuestions, ...questionDocs];
+              }
             }
           }
         }
       }
       
       if (allQuestions.length === 0) {
-        setError("No pending approval requests found for this book");
+        setError(`No pending approval requests found ${selectedBook === 'ALL_BOOKS' ? 'for any book' : 'for this book'}`);
         setLoading(false);
         return;
       }
       
-      // Process each question to get author information
-      for (let question of allQuestions) {
-        if (question.author) {
+      // Add this code to process questions and update state
+      const processedQuestions = [];
+      for (const questionData of allQuestions) {
+        // Convert author email to name if possible
+        if (questionData.author) {
           try {
             // First try teachers collection
             const teachersQuery = query(
               collection(db, 'users', 'usersData', 'teachers'),
-              where('email', '==', question.author)
+              where('email', '==', questionData.author)
             );
             let authorSnapshot = await getDocs(teachersQuery);
             
@@ -398,32 +457,33 @@ const ApprovalRequests = () => {
             if (authorSnapshot.empty) {
               const adminsQuery = query(
                 collection(db, 'users', 'usersData', 'admins'),
-                where('email', '==', question.author)
+                where('email', '==', questionData.author)
               );
               authorSnapshot = await getDocs(adminsQuery);
             }
             
             if (!authorSnapshot.empty) {
-              question.authorName = authorSnapshot.docs[0].data().name || "Unknown";
-              question.authorEmail = question.author;
+              questionData.authorName = authorSnapshot.docs[0].data().name || "Unknown";
+              questionData.authorEmail = questionData.author;
             } else {
-              question.authorName = question.author;
-              question.authorEmail = question.author;
+              questionData.authorName = questionData.author;
+              questionData.authorEmail = questionData.author;
             }
           } catch (err) {
             console.error("Error fetching author details:", err);
-            question.authorName = question.author;
-            question.authorEmail = question.author;
+            questionData.authorName = questionData.author;
+            questionData.authorEmail = questionData.author;
           }
         } else {
-          question.authorName = "Unknown";
-          question.authorEmail = "Unknown";
+          questionData.authorName = "Unknown";
+          questionData.authorEmail = "Unknown";
         }
+        
+        processedQuestions.push(questionData);
       }
       
-      console.log(`Found ${allQuestions.length} questions pending approval`);
-      setQuestions(allQuestions);
-      
+      console.log(`Processed ${processedQuestions.length} questions for display`);
+      setQuestions(processedQuestions);
     } catch (err) {
       console.error("Error fetching questions:", err);
       setError("Failed to load approval requests: " + err.message);
@@ -457,9 +517,23 @@ const ApprovalRequests = () => {
     }
   };
   
-  // Handle viewing question details
+  // Update handleViewDetails function
   const handleViewDetails = (question) => {
     setCurrentQuestion(question);
+    setEditedQuestionText(question.text || '');
+    
+    // Set the appropriate answer field based on question type
+    if (question.type === 'multiple') {
+      // For multiple choice, we'll edit options in the UI
+      setEditedAnswerText('');
+    } else if (question.type === 'short') {
+      setEditedAnswerText(question.shortAnswer || '');
+    } else if (question.type === 'truefalse') {
+      // For true/false, we don't edit the answer text directly
+      setEditedAnswerText('');
+    }
+    
+    setIsEditing(false);
     setDetailDialog(true);
   };
   
@@ -530,6 +604,56 @@ const ApprovalRequests = () => {
       setApproveDialog(false);
     }
   };
+
+  // Add this function to save question edits
+  const handleSaveQuestionChanges = async () => {
+    if (!currentQuestion || !currentQuestion.path) return;
+    
+    setSaveLoading(true);
+    try {
+      const questionRef = doc(db, currentQuestion.path);
+      
+      // Prepare update based on question type
+      const updateData = {
+        text: editedQuestionText
+      };
+      
+      if (currentQuestion.type === 'short') {
+        updateData.shortAnswer = editedAnswerText;
+      } else if (currentQuestion.type === 'multiple' && editedAnswerText) {
+        // Handle option edits if implemented
+        // This would be more complex and require tracking each option
+      }
+      
+      await updateDoc(questionRef, updateData);
+      
+      // Update the local state
+      setCurrentQuestion({
+        ...currentQuestion,
+        text: editedQuestionText,
+        ...(currentQuestion.type === 'short' ? { shortAnswer: editedAnswerText } : {})
+      });
+      
+      // Update in questions array
+      setQuestions(questions.map(q => 
+        q.id === currentQuestion.id 
+          ? {
+              ...q,
+              text: editedQuestionText,
+              ...(q.type === 'short' ? { shortAnswer: editedAnswerText } : {})
+            } 
+          : q
+      ));
+      
+      setIsEditing(false);
+      
+    } catch (err) {
+      console.error("Error saving question changes:", err);
+      setError("Failed to save changes: " + err.message);
+    } finally {
+      setSaveLoading(false);
+    }
+  };
   
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -596,6 +720,12 @@ const ApprovalRequests = () => {
                     <MenuItem value="" disabled>
                       {filteredBooks.length > 0 ? "Select Book" : "No books available"}
                     </MenuItem>
+                    
+                    {filteredBooks.length > 0 && (
+                      <MenuItem value="ALL_BOOKS" sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>
+                        -- All Books --
+                      </MenuItem>
+                    )}
                     
                     {filteredBooks.map((book) => (
                       <MenuItem key={book.id} value={book.id}>
@@ -885,19 +1015,32 @@ const ApprovalRequests = () => {
                   </Typography>
                 </Box>
                 
-                {/* Question Content - Enhanced readability */}
+                {/* Question Content - Now editable */}
                 <Box sx={{ p: 3, bgcolor: '#ffffff' }}>
-                  <Typography 
-                    variant="body1" 
-                    sx={{ 
-                      whiteSpace: 'pre-wrap', 
-                      lineHeight: 1.6,
-                      color: '#333333',
-                      fontSize: '1.05rem'
-                    }}
-                  >
-                    {currentQuestion.text || "No question text provided"}
-                  </Typography>
+                  {isEditing ? (
+                    <TextField
+                      fullWidth
+                      multiline
+                      rows={4}
+                      variant="outlined"
+                      value={editedQuestionText}
+                      onChange={(e) => setEditedQuestionText(e.target.value)}
+                      placeholder="Question text"
+                      sx={{ mb: 2 }}
+                    />
+                  ) : (
+                    <Typography 
+                      variant="body1" 
+                      sx={{ 
+                        whiteSpace: 'pre-wrap', 
+                        lineHeight: 1.6,
+                        color: '#333333',
+                        fontSize: '1.05rem'
+                      }}
+                    >
+                      {currentQuestion.text || "No question text provided"}
+                    </Typography>
+                  )}
                 </Box>
               </Paper>
 
@@ -988,19 +1131,32 @@ const ApprovalRequests = () => {
                     Correct Answer
                   </Typography>
                   
-                  <Paper 
-                    variant="outlined" 
-                    sx={{ 
-                      p: 2.5,
-                      bgcolor: '#e8f5e9',
-                      borderColor: '#4caf50',
-                      borderWidth: 2
-                    }}
-                  >
-                    <Typography variant="body1" sx={{ fontWeight: 'medium' }}>
-                      {currentQuestion.shortAnswer || "No answer provided"}
-                    </Typography>
-                  </Paper>
+                  {isEditing ? (
+                    <TextField
+                      fullWidth
+                      multiline
+                      rows={2}
+                      variant="outlined"
+                      value={editedAnswerText}
+                      onChange={(e) => setEditedAnswerText(e.target.value)}
+                      placeholder="Correct answer"
+                      sx={{ mb: 2 }}
+                    />
+                  ) : (
+                    <Paper 
+                      variant="outlined" 
+                      sx={{ 
+                        p: 2.5,
+                        bgcolor: '#e8f5e9',
+                        borderColor: '#4caf50',
+                        borderWidth: 2
+                      }}
+                    >
+                      <Typography variant="body1" sx={{ fontWeight: 'medium' }}>
+                        {currentQuestion.shortAnswer || "No answer provided"}
+                      </Typography>
+                    </Paper>
+                  )}
                 </Box>
               )}
 
@@ -1215,25 +1371,58 @@ const ApprovalRequests = () => {
             onClick={() => setDetailDialog(false)} 
             variant="outlined" 
             startIcon={<CloseIcon />}
+            disabled={saveLoading}
           >
             Close
           </Button>
           
           {currentQuestion && (
             <Box>
-              <Button 
-                onClick={() => {
-                  handleApproveOne(currentQuestion.id);
-                  setDetailDialog(false);
-                }}
-                variant="contained"
-                color="primary"
-                disabled={approveLoading}
-                startIcon={approveLoading ? <CircularProgress size={20} /> : <ApproveIcon />}
-                sx={{ mr: 1 }}
-              >
-                {approveLoading ? 'Approving...' : 'Approve Question'}
-              </Button>
+              {isEditing ? (
+                <>
+                  <Button 
+                    onClick={() => setIsEditing(false)}
+                    variant="outlined"
+                    color="secondary"
+                    disabled={saveLoading}
+                    sx={{ mr: 1 }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    onClick={handleSaveQuestionChanges}
+                    variant="contained"
+                    color="primary"
+                    disabled={saveLoading}
+                    startIcon={saveLoading ? <CircularProgress size={20} /> : <SaveIcon />}
+                  >
+                    {saveLoading ? 'Saving...' : 'Save Changes'}
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button 
+                    onClick={() => setIsEditing(true)}
+                    variant="outlined"
+                    color="secondary"
+                    sx={{ mr: 1 }}
+                  >
+                    Edit Question
+                  </Button>
+                  <Button 
+                    onClick={() => {
+                      handleApproveOne(currentQuestion.id);
+                      setDetailDialog(false);
+                    }}
+                    variant="contained"
+                    color="primary"
+                    disabled={approveLoading}
+                    startIcon={approveLoading ? <CircularProgress size={20} /> : <ApproveIcon />}
+                  >
+                    {approveLoading ? 'Approving...' : 'Approve Question'}
+                  </Button>
+                </>
+              )}
             </Box>
           )}
         </DialogActions>

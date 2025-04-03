@@ -110,7 +110,7 @@ const AdminPanel = () => {
     },
     { 
       id: "create-categories", 
-      name: "Create Categories", 
+      name: "Create Departments", 
       route: "/create-categories",
       icon: <CategoryIcon />,
       description: "Add and manage content categories for organization"

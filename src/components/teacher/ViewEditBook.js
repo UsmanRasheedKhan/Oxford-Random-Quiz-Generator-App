@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from "react";
+// Add this import for navigation
+import { useNavigate } from "react-router-dom";
 import { 
   Box, Typography, Button, Container, Paper, Grid, FormControl, 
   InputLabel, Select, MenuItem, TextField, CircularProgress, Divider,
@@ -21,8 +23,14 @@ import AddIcon from '@mui/icons-material/Add';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import TopicIcon from '@mui/icons-material/Topic';
 import QuizIcon from '@mui/icons-material/Quiz';
+// Add this import for dashboard icon
+import DashboardIcon from '@mui/icons-material/Dashboard';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 
 const ViewEditBook = () => {
+  // Add navigate function
+  const navigate = useNavigate();
+  
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -838,9 +846,24 @@ const ViewEditBook = () => {
 
   return (
     <Box sx={{ m: 4 }}>
-      <Typography variant="h4" align="center" gutterBottom sx={{ color: "#011E41" }}>
-        View and Edit Books
-      </Typography>
+      {/* Modify header to move back button to right side */}
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
+        <Box sx={{ width: '140px' }}></Box> {/* Empty box for spacing balance on left */}
+        
+        <Typography variant="h4" sx={{ color: "#011E41", flexGrow: 1, textAlign: 'center' }}>
+          View and Edit Books
+        </Typography>
+        
+        <Box>
+          <Button
+            variant="outlined"
+            startIcon={<ArrowBackIcon />}
+            onClick={() => navigate('/teacher')}
+          >
+            Back to Dashboard
+          </Button>
+        </Box>
+      </Box>
       
       {error && (
         <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 3 }}>
