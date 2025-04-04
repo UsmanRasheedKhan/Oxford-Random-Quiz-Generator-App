@@ -27,6 +27,27 @@ import QuizIcon from '@mui/icons-material/Quiz';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 
+// Utility function to detect if text contains Urdu
+/* 
+const isUrduText = (text) => {
+  if (!text) return false;
+  
+  // Urdu Unicode range (approximate)
+  const urduPattern = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
+  
+  // Count characters that match Urdu pattern
+  let urduCharCount = 0;
+  for (let i = 0; i < text.length; i++) {
+    if (urduPattern.test(text[i])) {
+      urduCharCount++;
+    }
+  }
+  
+  // If more than 30% of characters are Urdu, consider it Urdu text
+  return urduCharCount / text.length > 0.3;
+};
+*/
+
 const ViewEditBook = () => {
   // Add navigate function
   const navigate = useNavigate();
@@ -71,6 +92,12 @@ const ViewEditBook = () => {
   const [newQuestionCorrectOption, setNewQuestionCorrectOption] = useState(0);
   const [newQuestionShortAnswer, setNewQuestionShortAnswer] = useState("");
   const [newQuestionIsTrueAnswer, setNewQuestionIsTrueAnswer] = useState(true);
+
+  // Add these states to your existing state declarations
+  const [editQuestionOptions, setEditQuestionOptions] = useState([]);
+  const [editQuestionCorrectOption, setEditQuestionCorrectOption] = useState(0);
+  const [editQuestionShortAnswer, setEditQuestionShortAnswer] = useState("");
+  const [editQuestionIsTrueAnswer, setEditQuestionIsTrueAnswer] = useState(true);
 
   // Auth check
   useEffect(() => {
@@ -494,15 +521,37 @@ const ViewEditBook = () => {
     }
   };
 
-  // Handle question edit
+  // Update the startEditingQuestion function
   const startEditingQuestion = (question) => {
     setEditingQuestion(question.id);
     setEditText(question.text);
+    
+    // Set type-specific edit states
+    if (question.type === "multiple") {
+      setEditQuestionOptions([...question.options]);
+      setEditQuestionCorrectOption(question.correctOption);
+    } else if (question.type === "short") {
+      setEditQuestionShortAnswer(question.shortAnswer);
+    } else if (question.type === "truefalse") {
+      setEditQuestionIsTrueAnswer(question.isTrueAnswer);
+    }
   };
 
+  // Update the saveQuestionEdit function
   const saveQuestionEdit = async (question, chapterId, topicId) => {
     if (!editText.trim()) {
       setError("Question text cannot be empty");
+      return;
+    }
+    
+    // Validate type-specific fields
+    if (question.type === "multiple" && editQuestionOptions.some(opt => !opt.trim())) {
+      setError("All options must be filled");
+      return;
+    }
+    
+    if (question.type === "short" && !editQuestionShortAnswer.trim()) {
+      setError("Short answer cannot be empty");
       return;
     }
     
@@ -526,11 +575,25 @@ const ViewEditBook = () => {
         question.id
       );
       
-      await updateDoc(questionRef, {
+      // Create update object with question text
+      const updateData = {
         text: editText,
         lastEdited: serverTimestamp(),
         editedBy: currentUser.uid
-      });
+      };
+      
+      // Add type-specific updates
+      if (question.type === "multiple") {
+        updateData.options = editQuestionOptions;
+        updateData.correctOption = editQuestionCorrectOption;
+      } else if (question.type === "short") {
+        updateData.shortAnswer = editQuestionShortAnswer;
+      } else if (question.type === "truefalse") {
+        updateData.isTrueAnswer = editQuestionIsTrueAnswer;
+      }
+      
+      // Update in Firestore
+      await updateDoc(questionRef, updateData);
       
       // Update local state
       setBookStructure(prevStructure => ({
@@ -544,7 +607,18 @@ const ViewEditBook = () => {
                   return {
                     ...topic,
                     questions: topic.questions.map(q => 
-                      q.id === question.id ? { ...q, text: editText } : q
+                      q.id === question.id ? { 
+                        ...q, 
+                        text: editText,
+                        ...question.type === "multiple" ? { 
+                          options: editQuestionOptions, 
+                          correctOption: editQuestionCorrectOption 
+                        } : question.type === "short" ? { 
+                          shortAnswer: editQuestionShortAnswer 
+                        } : { 
+                          isTrueAnswer: editQuestionIsTrueAnswer 
+                        }
+                      } : q
                     )
                   };
                 }
@@ -734,115 +808,82 @@ const ViewEditBook = () => {
     }
   };
 
-  // Add this function to handle adding a new question
-  const addNewQuestion = async (chapterId, topicId) => {
-    if (!newItemText.trim()) {
-      setError("Question text cannot be empty");
+  // Updated addNewQuestion function
+const addNewQuestion = async (chapterId, topicId) => {
+  if (!newItemText.trim()) {
+    setError("Question text cannot be empty");
+    return;
+  }
+  
+  // Validate based on question type
+  if (newQuestionType === "multiple") {
+    if (newQuestionOptions.some(opt => !opt.trim())) {
+      setError("All options must be filled");
       return;
     }
+  } else if (newQuestionType === "short") {
+    if (!newQuestionShortAnswer.trim()) {
+      setError("Short answer cannot be empty");
+      return;
+    }
+  }
+  
+  try {
+    setLoading(true);
     
-    // Validate based on question type
+    const formattedGrade = selectedGrade.replace(/ /g, "_");
+    
+    // Create base question object
+    const newQuestion = {
+      text: newItemText,
+      type: newQuestionType,
+      createdAt: serverTimestamp(),
+      createdBy: currentUser.uid,
+      status: "pending", // Mark as pending for approval
+      creatorEmail: currentUser.email,
+      bookId: selectedBook,
+      chapterId: chapterId,
+      topicId: topicId,
+      department: selectedDepartment,
+      grade: selectedGrade,
+      // Add metadata for admin context
+      chapterName: bookStructure.chapters.find(c => c.id === chapterId).name,
+      topicName: bookStructure.chapters.find(c => c.id === chapterId).topics.find(t => t.id === topicId).name
+    };
+    
+    // Add type-specific fields
     if (newQuestionType === "multiple") {
-      if (newQuestionOptions.some(opt => !opt.trim())) {
-        setError("All options must be filled");
-        return;
-      }
+      newQuestion.options = newQuestionOptions;
+      newQuestion.correctOption = newQuestionCorrectOption;
     } else if (newQuestionType === "short") {
-      if (!newQuestionShortAnswer.trim()) {
-        setError("Short answer cannot be empty");
-        return;
-      }
+      newQuestion.shortAnswer = newQuestionShortAnswer;
+    } else if (newQuestionType === "truefalse") {
+      newQuestion.isTrueAnswer = newQuestionIsTrueAnswer;
     }
     
-    try {
-      setLoading(true);
-      
-      const formattedGrade = selectedGrade.replace(/ /g, "_");
-      
-      // Create base question object
-      const newQuestion = {
-        text: newItemText,
-        type: newQuestionType,
-        createdAt: serverTimestamp(),
-        createdBy: currentUser.uid
-      };
-      
-      // Add type-specific fields
-      if (newQuestionType === "multiple") {
-        newQuestion.options = newQuestionOptions;
-        newQuestion.correctOption = newQuestionCorrectOption;
-      } else if (newQuestionType === "short") {
-        newQuestion.shortAnswer = newQuestionShortAnswer;
-      } else if (newQuestionType === "truefalse") {
-        newQuestion.isTrueAnswer = newQuestionIsTrueAnswer;
-      }
-      
-      // Reference to questions collection
-      const questionsRef = collection(
-        db,
-        "books",
-        selectedDepartment,
-        "grades",
-        formattedGrade,
-        "books",
-        selectedBook,
-        "chapters",
-        chapterId,
-        "topics",
-        topicId,
-        "questions"
-      );
-      
-      // Add the question to Firestore
-      const newQuestionRef = await addDoc(questionsRef, newQuestion);
-      
-      // Create complete question object for local state
-      const completeQuestion = {
-        id: newQuestionRef.id,
-        ...newQuestion
-      };
-      
-      // Update local state
-      setBookStructure(prevStructure => ({
-        ...prevStructure,
-        chapters: prevStructure.chapters.map(chapter => {
-          if (chapter.id === chapterId) {
-            return {
-              ...chapter,
-              topics: chapter.topics.map(topic => {
-                if (topic.id === topicId) {
-                  return {
-                    ...topic,
-                    questions: [...topic.questions, completeQuestion]
-                  };
-                }
-                return topic;
-              })
-            };
-          }
-          return chapter;
-        })
-      }));
-      
-      // Reset UI state
-      setNewItemText("");
-      setAddingQuestion(null);
-      setNewQuestionType("multiple");
-      setNewQuestionOptions(["", "", "", ""]);
-      setNewQuestionCorrectOption(0);
-      setNewQuestionShortAnswer("");
-      setNewQuestionIsTrueAnswer(true);
-      
-      setSuccess("Question added successfully");
-      setTimeout(() => setSuccess(null), 3000);
-      
-      setLoading(false);
-    } catch (error) {
-      console.error("Error adding question:", error);
-      setError("Failed to add question: " + error.message);
-      setLoading(false);
-    }
-  };
+    // Submit to pending questions collection for admin approval
+    const pendingQuestionsRef = collection(db, "pendingQuestions");
+    await addDoc(pendingQuestionsRef, newQuestion);
+    
+    // Reset UI state
+    setNewItemText("");
+    setAddingQuestion(null);
+    setNewQuestionType("multiple");
+    setNewQuestionOptions(["", "", "", ""]);
+    setNewQuestionCorrectOption(0);
+    setNewQuestionShortAnswer("");
+    setNewQuestionIsTrueAnswer(true);
+    
+    setSuccess("Question submitted for admin approval");
+    setTimeout(() => setSuccess(null), 3000);
+    
+    setLoading(false);
+  } catch (error) {
+    console.error("Error submitting question:", error);
+    setError("Failed to submit question: " + error.message);
+    setLoading(false);
+  }
+};
 
   return (
     <Box sx={{ m: 4 }}>
@@ -1041,7 +1082,9 @@ const ViewEditBook = () => {
                             sx={{ minWidth: 250 }}
                           />
                         ) : (
-                          <Typography variant="h6">{chapter.name}</Typography>
+                          <Typography variant="h6">
+                            {chapter.name}
+                          </Typography>
                         )}
                       </Box>
                       
@@ -1111,7 +1154,9 @@ const ViewEditBook = () => {
                                   sx={{ minWidth: 250 }}
                                 />
                               ) : (
-                                <Typography>{topic.name}</Typography>
+                                <Typography>
+                                  {topic.name}
+                                </Typography>
                               )}
                             </Box>
                             
@@ -1162,18 +1207,94 @@ const ViewEditBook = () => {
                                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                                     <Box sx={{ flexGrow: 1 }}>
                                       {editingQuestion === question.id ? (
-                                        <TextField
-                                          fullWidth
-                                          multiline
-                                          rows={2}
-                                          value={editText}
-                                          onChange={(e) => setEditText(e.target.value)}
-                                          variant="outlined"
-                                          size="small"
-                                          autoFocus
-                                        />
+                                        <Box sx={{ width: '100%' }}>
+                                          <TextField
+                                            fullWidth
+                                            multiline
+                                            rows={2}
+                                            value={editText}
+                                            onChange={(e) => setEditText(e.target.value)}
+                                            variant="outlined"
+                                            label="Question text"
+                                            size="small"
+                                            autoFocus
+                                            sx={{ mb: 2 }}
+                                          />
+                                          
+                                          {question.type === "multiple" && (
+                                            <Box sx={{ mb: 2 }}>
+                                              <Typography variant="subtitle2" sx={{ mb: 1 }}>Options:</Typography>
+                                              {editQuestionOptions.map((option, index) => (
+                                                <Box key={index} sx={{ display: 'flex', mb: 1, alignItems: 'center' }}>
+                                                  <Radio
+                                                    checked={editQuestionCorrectOption === index}
+                                                    onChange={() => setEditQuestionCorrectOption(index)}
+                                                    size="small"
+                                                  />
+                                                  <TextField
+                                                    fullWidth
+                                                    label={`Option ${index + 1}${editQuestionCorrectOption === index ? ' (Correct)' : ''}`}
+                                                    value={option}
+                                                    onChange={(e) => {
+                                                      const newOptions = [...editQuestionOptions];
+                                                      newOptions[index] = e.target.value;
+                                                      setEditQuestionOptions(newOptions);
+                                                    }}
+                                                    variant="outlined"
+                                                    size="small"
+                                                  />
+                                                </Box>
+                                              ))}
+                                            </Box>
+                                          )}
+                                          
+                                          {question.type === "short" && (
+                                            <TextField
+                                              fullWidth
+                                              label="Correct Answer"
+                                              value={editQuestionShortAnswer}
+                                              onChange={(e) => setEditQuestionShortAnswer(e.target.value)}
+                                              variant="outlined"
+                                              size="small"
+                                              sx={{ mb: 2 }}
+                                            />
+                                          )}
+                                          
+                                          {question.type === "truefalse" && (
+                                            <FormControl component="fieldset" sx={{ mb: 2 }}>
+                                              <FormLabel component="legend">Correct Answer</FormLabel>
+                                              <RadioGroup 
+                                                row 
+                                                value={editQuestionIsTrueAnswer ? "true" : "false"} 
+                                                onChange={(e) => setEditQuestionIsTrueAnswer(e.target.value === "true")}
+                                              >
+                                                <FormControlLabel value="true" control={<Radio />} label="True" />
+                                                <FormControlLabel value="false" control={<Radio />} label="False" />
+                                              </RadioGroup>
+                                            </FormControl>
+                                          )}
+                                          
+                                          <Box sx={{ display: 'flex', gap: 1 }}>
+                                            <IconButton 
+                                              color="primary" 
+                                              onClick={() => saveQuestionEdit(question, chapter.id, topic.id)}
+                                              size="small"
+                                            >
+                                              <SaveIcon fontSize="small" />
+                                            </IconButton>
+                                            <IconButton 
+                                              color="error" 
+                                              onClick={cancelEditing}
+                                              size="small"
+                                            >
+                                              <CancelIcon fontSize="small" />
+                                            </IconButton>
+                                          </Box>
+                                        </Box>
                                       ) : (
-                                        <Typography variant="body1">{question.text}</Typography>
+                                        <Typography variant="body1">
+                                          {question.text}
+                                        </Typography>
                                       )}
                                       
                                       {question.type === "multiple" && (
@@ -1252,14 +1373,16 @@ const ViewEditBook = () => {
                            addingQuestion.chapterId === chapter.id && 
                            addingQuestion.topicId === topic.id ? (
                             <Box sx={{ mt: 2, p: 2, border: '1px dashed #ccc', borderRadius: 1 }}>
-                              <Typography variant="subtitle1" sx={{ mb: 2 }}>Add New Question</Typography>
+                              {/* <Typography variant="subtitle1" sx={{ mb: 2 }}>Add New Question</Typography> */}
                               
                               {/* Question text */}
                               <TextField
                                 fullWidth
                                 label="Question Text"
                                 value={newItemText}
-                                onChange={(e) => setNewItemText(e.target.value)}
+                                onChange={(e) => {
+                                  setNewItemText(e.target.value);
+                                }}
                                 variant="outlined"
                                 multiline
                                 rows={2}
@@ -1335,14 +1458,14 @@ const ViewEditBook = () => {
                               )}
                               
                               <Box sx={{ display: 'flex', gap: 1 }}>
-                                <Button
+                                {/* <Button
                                   variant="contained"
                                   color="primary"
                                   onClick={() => addNewQuestion(chapter.id, topic.id)}
                                   disabled={!newItemText.trim() || loading}
                                 >
                                   Add Question
-                                </Button>
+                                </Button> */}
                                 <Button
                                   variant="outlined"
                                   onClick={() => {
@@ -1359,11 +1482,20 @@ const ViewEditBook = () => {
                               variant="outlined"
                               startIcon={<AddIcon />}
                               onClick={() => setAddingQuestion({ chapterId: chapter.id, topicId: topic.id })}
-                              sx={{ mt: 2 }}
+                              sx={{ mt: 2, visibility: 'hidden' }}
                               size="small"
                             >
                               Add New Question
                             </Button>
+                            // <Button
+                            //   variant="outlined"
+                            //   startIcon={<AddIcon />}
+                            //   onClick={() => setAddingQuestion({ chapterId: chapter.id, topicId: topic.id })}
+                            //   sx={{ mt: 2 }}
+                            //   size="small"
+                            // >
+                            //   Add New Question
+                            // </Button>
                           )}
                         </AccordionDetails>
                       </Accordion>

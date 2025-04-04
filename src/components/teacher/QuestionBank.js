@@ -133,20 +133,49 @@ const fetchUserDepartments = async (user) => {
       setUserAssignedDepartments(assignedDepartments);
       setDepartments(assignedDepartments);
       
-      // Parse the grades which are in "Department|Grade" format
+      // Parse the grades into department groups with improved format handling
       const gradesArray = teacherData.grades || [];
       const parsedGrades = {};
       
-      // Transform the flat array into a nested structure
       gradesArray.forEach(gradeString => {
-        if (gradeString && gradeString.includes('|')) {
-          const [department, grade] = gradeString.split('|');
+        // Try different potential formats
+        if (gradeString) {
+          let department, grade;
           
-          if (!parsedGrades[department]) {
-            parsedGrades[department] = [];
+          if (gradeString.includes('|')) {
+            // Format: "Department|Grade"
+            [department, grade] = gradeString.split('|');
+          } else if (gradeString.includes(':')) {
+            // Format: "Department:Grade" 
+            [department, grade] = gradeString.split(':');
+          } else if (gradeString.includes(' - ')) {
+            // Format: "Department - Grade"
+            [department, grade] = gradeString.split(' - ');
+          } else {
+            // Try to match department name from the full string
+            department = assignedDepartments.find(dept => 
+              gradeString.toLowerCase().includes(dept.toLowerCase())
+            );
+            
+            if (department) {
+              // Extract grade by removing department name
+              grade = gradeString
+                .replace(department, '')
+                .replace(/^[:\-\s]+/, '')  // Remove leading separators and spaces
+                .trim();
+            }
           }
           
-          parsedGrades[department].push(grade);
+          if (department && grade) {
+            // Normalize department name
+            const normalizedDept = department.trim();
+            
+            if (!parsedGrades[normalizedDept]) {
+              parsedGrades[normalizedDept] = [];
+            }
+            
+            parsedGrades[normalizedDept].push(grade.trim());
+          }
         }
       });
       
