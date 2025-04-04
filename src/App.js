@@ -16,6 +16,7 @@ import GenerateQuiz from "./components/teacher/GenerateQuiz";
 import ViewEditBook from "./components/teacher/ViewEditBook";
 import ApprovalRequests from "./components/admin/ApprovalRequests";
 import UserAccounts from "./components/admin/UserAccounts";
+import ViewQuiz from "./components/teacher/ViewQuiz";
 
 const App = () => {
   return (
@@ -39,6 +40,7 @@ const App = () => {
       <Route path="/teacher/question-bank" element={<QuestionBank />} />
       <Route path="/teacher/generate-quiz" element={<GenerateQuiz />} />
       <Route path="/teacher/view-books" element={<ViewEditBook />} />
+      <Route path="/teacher/view-quiz" element={<ViewQuiz />} />
 
     </Routes>
   );

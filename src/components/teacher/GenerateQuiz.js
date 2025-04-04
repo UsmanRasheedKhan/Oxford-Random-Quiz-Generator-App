@@ -7,13 +7,16 @@ import {
   ListItemText, Alert, Card, CardHeader, CardContent
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
-import { collection, query, where, getDocs, doc, getDoc } from "firebase/firestore";
+import { collection, query, where, getDocs, doc, getDoc, addDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "../../firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ChapterIcon from '@mui/icons-material/MenuBook';
 import TopicIcon from '@mui/icons-material/Topic';
 import QuizIcon from '@mui/icons-material/Quiz';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import SaveAltIcon from '@mui/icons-material/SaveAlt';
+import PrintIcon from '@mui/icons-material/Print';
 
 const GenerateQuiz = () => {
   const navigate = useNavigate();
@@ -51,6 +54,7 @@ const GenerateQuiz = () => {
   const [printDialogOpen, setPrintDialogOpen] = useState(false);
   const [quizHeaders, setQuizHeaders] = useState({ title: "", description: "" });
   const [showTopicNames, setShowTopicNames] = useState(true);
+  const [success, setSuccess] = useState(null);
 
   const handlePrintQuiz = () => {
     window.print(); // Directly trigger the print functionality
@@ -64,11 +68,15 @@ const GenerateQuiz = () => {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
-      setAuthLoading(false);
+      if (!user) {
+        navigate('/login');
+      } else {
+        setAuthLoading(false);
+      }
     });
     
     return () => unsubscribe();
-  }, []);
+  }, [navigate]);
   
   // Load user and their departments
   useEffect(() => {
@@ -726,12 +734,62 @@ const renderGeneratedQuiz = () => {
 
   return (
     <Box>
+      {success && (
+        <Alert severity="success" sx={{ mb: 3 }} onClose={() => setSuccess(null)}>
+          {success}
+        </Alert>
+      )}
+    
+      {/* Quiz header form */}
+      <Paper elevation={3} sx={{ p: 3, mb: 4, className: "no-print" }}>
+        <Typography variant="h6" sx={{ mb: 2, color: "#011E41" }}>
+          Quiz Details
+        </Typography>
+        <Grid container spacing={2}>
+          <Grid item xs={12}>
+            <TextField
+              fullWidth
+              label="Quiz Title"
+              value={quizHeaders.title || generatedQuiz.title}
+              onChange={(e) => setQuizHeaders({...quizHeaders, title: e.target.value})}
+              variant="outlined"
+              placeholder="Enter quiz title"
+              sx={{ mb: 2 }}
+            />
+          </Grid>
+          <Grid item xs={12}>
+            <TextField
+              fullWidth
+              label="Quiz Description"
+              value={quizHeaders.description || generatedQuiz.description}
+              onChange={(e) => setQuizHeaders({...quizHeaders, description: e.target.value})}
+              variant="outlined"
+              placeholder="Enter quiz description"
+              multiline
+              rows={2}
+            />
+          </Grid>
+          <Grid item xs={12}>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={showTopicNames}
+                  onChange={(e) => setShowTopicNames(e.target.checked)}
+                />
+              }
+              label="Show chapter and topic names with questions"
+            />
+          </Grid>
+        </Grid>
+      </Paper>
+
+      {/* Quiz info - will be printed */}
       <Paper elevation={3} sx={{ p: 3, mb: 4 }}>
         <Typography variant="h5" gutterBottom color="#011E41">
-          {generatedQuiz.title}
+          {quizHeaders.title || generatedQuiz.title}
         </Typography>
         <Typography variant="subtitle1" gutterBottom>
-          {generatedQuiz.description}
+          {quizHeaders.description || generatedQuiz.description}
         </Typography>
         <Divider sx={{ my: 2 }} />
         <Typography variant="body2" sx={{ mb: 1 }}>
@@ -752,6 +810,7 @@ const renderGeneratedQuiz = () => {
         Quiz Questions
       </Typography>
 
+      {/* Questions - will be printed */}
       {generatedQuiz.questions.map((question, index) => (
         <Card key={question.id} sx={{ mb: 3, boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }}>
           <CardHeader
@@ -794,18 +853,32 @@ const renderGeneratedQuiz = () => {
         </Card>
       ))}
 
-      <Box sx={{ mt: 4, mb: 2, display: 'flex', justifyContent: 'center' }}>
+      {/* Action buttons - will not be printed */}
+      <Box sx={{ mt: 4, mb: 2, display: 'flex', justifyContent: 'center', className: "no-print" }}>
+        <Button
+          variant="contained"
+          onClick={saveQuizToDatabase}
+          sx={{ mr: 2 }}
+          startIcon={<SaveAltIcon />}
+          disabled={loading}
+        >
+          {loading ? "Saving..." : "Save Quiz"}
+        </Button>
+        
         <Button
           variant="contained"
           color="primary"
           onClick={handlePrintQuiz}
           sx={{ mr: 2, bgcolor: '#011E41' }}
+          startIcon={<PrintIcon />}
         >
           Print Quiz
         </Button>
+        
         <Button
           variant="outlined"
           onClick={handlePrintAnswerKey}
+          startIcon={<PrintIcon />}
         >
           Print Answer Key
         </Button>
@@ -815,34 +888,185 @@ const renderGeneratedQuiz = () => {
 };
 
 const handlePrintAnswerKey = () => {
-  const answerKey = generatedQuiz.questions.map((question, index) => ({
-    number: index + 1,
-    text: question.text,
-    answer:
-      question.type === "multiple"
-        ? question.options[question.correctOption]
-        : question.type === "short"
-        ? question.shortAnswer
-        : question.isTrueAnswer
-        ? "True"
-        : "False",
-    topic: `${question.chapterName} > ${question.topicName}`,
-  }));
+  const answerKeyContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Answer Key - ${generatedQuiz.title}</title>
+      <style>
+        body { font-family: Arial, sans-serif; margin: 30px; }
+        h1 { color: #011E41; margin-bottom: 20px; }
+        .quiz-info { margin-bottom: 30px; }
+        .answer-item { margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #eee; }
+        .question { margin-bottom: 5px; }
+        .answer { font-weight: bold; }
+        .topic { font-style: italic; color: #666; font-size: 0.9em; }
+        @media print {
+          .no-print { display: none; }
+          button { display: none; }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="no-print" style="text-align: right; margin-bottom: 20px;">
+        <button onclick="window.print()" style="padding: 10px 20px; background-color: #011E41; color: white; border: none; border-radius: 4px; cursor: pointer;">
+          Print Answer Key
+        </button>
+      </div>
+      
+      <h1>Answer Key: ${quizHeaders.title || generatedQuiz.title}</h1>
+      
+      <div class="quiz-info">
+        <p><strong>Department:</strong> ${generatedQuiz.department}</p>
+        <p><strong>Grade:</strong> ${generatedQuiz.grade}</p>
+        <p><strong>Book:</strong> ${generatedQuiz.book}</p>
+        <p><strong>Generated:</strong> ${new Date().toLocaleDateString()}</p>
+      </div>
+      
+      ${generatedQuiz.questions.map((question, index) => `
+        <div class="answer-item">
+          <div class="question"><strong>Q${index + 1}:</strong> ${question.text}</div>
+          <div class="answer">Answer: ${
+            question.type === "multiple" 
+              ? question.options[question.correctOption] 
+              : question.type === "short" 
+                ? question.shortAnswer 
+                : question.isTrueAnswer 
+                  ? "True" 
+                  : "False"
+          }</div>
+          <div class="topic">Topic: ${question.chapterName} > ${question.topicName}</div>
+        </div>
+      `).join('')}
+    </body>
+    </html>
+  `;
 
-  console.log("Answer Key:", answerKey); // Replace with actual print logic
-  // You can render the answer key in a new window or a printable section
+  const answerWindow = window.open('', '_blank', 'width=800,height=600');
+  answerWindow.document.write(answerKeyContent);
+  answerWindow.document.close();
 };
+
+// Updated saveQuizToDatabase function
+const saveQuizToDatabase = async () => {
+  try {
+    // Check if user is authenticated
+    if (!currentUser) {
+      setError("You must be logged in to save quizzes");
+      return;
+    }
+    
+    setLoading(true);
+    
+    // Create quiz object to save (keep existing structure)
+    const quizData = {
+      title: quizHeaders.title || generatedQuiz.title,
+      description: quizHeaders.description || generatedQuiz.description,
+      department: generatedQuiz.department,
+      grade: generatedQuiz.grade,
+      book: generatedQuiz.book,
+      quizType: generatedQuiz.quizType || 'standard',
+      createdAt: serverTimestamp(),
+      createdBy: currentUser.email,
+      authorId: currentUser.uid,
+      questions: generatedQuiz.questions.map(q => {
+        // Create base object with common properties
+        const questionData = {
+          id: q.id,
+          text: q.text,
+          type: q.type,
+          chapterName: q.chapterName || '',
+          topicName: q.topicName || ''
+        };
+        
+        // Add type-specific properties
+        if (q.type === "multiple") {
+          questionData.options = q.options || [];
+          questionData.correctOption = q.correctOption !== undefined ? q.correctOption : 0;
+        } 
+        else if (q.type === "short") {
+          questionData.shortAnswer = q.shortAnswer || '';
+        }
+        else if (q.type === "truefalse") {
+          questionData.isTrueAnswer = q.isTrueAnswer === true;
+        }
+        
+        return questionData;
+      })
+    };
+    
+    // First, fetch the teacher's document to ensure it exists
+    const teacherQuery = query(
+      collection(db, "users", "usersData", "teachers"),
+      where("email", "==", currentUser.email)
+    );
+    const teacherSnapshot = await getDocs(teacherQuery);
+    
+    if (teacherSnapshot.empty) {
+      throw new Error("Teacher profile not found");
+    }
+    
+    const teacherId = teacherSnapshot.docs[0].id;
+    
+    // Save to teacher's collection instead of root quizes collection
+    const teacherQuizesRef = collection(
+      db, 
+      "users", 
+      "usersData", 
+      "teachers", 
+      teacherId, 
+      "quizes"
+    );
+    
+    const docRef = await addDoc(teacherQuizesRef, quizData);
+    
+    console.log("Quiz saved with ID:", docRef.id);
+    setSuccess(`Quiz saved successfully!`);
+    setTimeout(() => setSuccess(null), 5000);
+    setLoading(false);
+  } catch (error) {
+    console.error("Error saving quiz:", error);
+    setError("Failed to save quiz: " + error.message);
+    setLoading(false);
+  }
+};
+
+// Add this in your component before the return statement
+useEffect(() => {
+  // Add print styles
+  const style = document.createElement('style');
+  style.textContent = `
+    @media print {
+      .no-print, button, .MuiAppBar-root, header, nav, footer {
+        display: none !important;
+      }
+      body {
+        padding: 0;
+        margin: 0;
+      }
+      #quiz-section {
+        padding: 0;
+      }
+    }
+  `;
+  document.head.appendChild(style);
+  
+  return () => {
+    document.head.removeChild(style);
+  };
+}, []);
 
 // Fix the return statement
 return (
   <Container maxWidth="lg">
     <Box sx={{ mt: 4, mb: 2 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }} className="no-print">
         <Typography variant="h4" component="h1" color="#011E41">
           Generate Quiz
         </Typography>
         <Button 
           variant="outlined" 
+          startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/teacher")}
         >
           Back to Dashboard

@@ -17,7 +17,7 @@ import {
   MenuBook as BookIcon, 
   QuestionAnswer as QuestionBankIcon, 
   Quiz as QuizIcon,
-  Logout as LogoutIcon ,
+  Logout as LogoutIcon,
   AccountCircle as ProfileIcon,
 } from "@mui/icons-material";
 import { styled } from "@mui/material/styles";
@@ -107,7 +107,14 @@ const TeacherPanel = () => {
       icon: <ProfileIcon />,
       description: "View and update your profile information",
       path: "/profile",
-    },  
+    },
+    { 
+      id: "view-quiz", 
+      title: "View Quizzes", // Fixed spelling
+      icon: <QuizIcon />, // Changed icon to QuizIcon
+      description: "Access and manage your previously created quizzes",
+      path: "/teacher/view-quiz", // Updated path to match the new component
+    }, 
   ];
 
   return (
