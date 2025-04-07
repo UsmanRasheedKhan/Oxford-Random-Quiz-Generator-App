@@ -887,8 +887,11 @@ const renderGeneratedQuiz = () => {
         <Typography variant="body2" sx={{ mb: 1 }}>
           <strong>Book:</strong> {generatedQuiz.book}
         </Typography>
-        <Typography variant="body2">
+        <Typography variant="body2" sx={{ mb: 1 }}>
           <strong>Questions:</strong> {generatedQuiz.questions.length}
+        </Typography>
+        <Typography variant="body2" sx={{ mb: 1, fontWeight: 'bold' }}>
+          <strong>Total Marks:</strong> {generatedQuiz.questions.length}
         </Typography>
       </Paper>
 
@@ -900,9 +903,30 @@ const renderGeneratedQuiz = () => {
       {groupedQuestions.multiple.length > 0 && (
         <Box sx={{ mb: 4 }}>
           <Paper sx={{ p: 2, mb: 2, bgcolor: '#f8f8f8' }}>
-            <Typography variant="subtitle1" fontWeight="bold">
-              Choose the correct answer from the options provided:
-            </Typography>
+            <Box sx={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center',
+              width: '100%' // Ensure full width
+            }}>
+              <Typography variant="subtitle1" fontWeight="bold" sx={{ flexGrow: 1 }}>
+                Choose the correct answer from the options provided:
+              </Typography>
+              <Typography 
+                variant="subtitle1" 
+                fontWeight="bold" 
+                color="primary"
+                sx={{ 
+                  ml: 2, 
+                  backgroundColor: 'rgba(1, 30, 65, 0.08)', 
+                  padding: '4px 8px',
+                  borderRadius: '4px',
+                  display: 'inline-block'
+                }}
+              >
+                [{groupedQuestions.multiple.length} marks]
+              </Typography>
+            </Box>
           </Paper>
           
           {groupedQuestions.multiple.map((question) => (
@@ -936,9 +960,14 @@ const renderGeneratedQuiz = () => {
       {groupedQuestions.truefalse.length > 0 && (
         <Box sx={{ mb: 4 }}>
           <Paper sx={{ p: 2, mb: 2, bgcolor: '#f8f8f8' }}>
-            <Typography variant="subtitle1" fontWeight="bold">
-              State whether the following statements are true or false:
-            </Typography>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Typography variant="subtitle1" fontWeight="bold">
+                State whether the following statements are true or false:
+              </Typography>
+              <Typography variant="subtitle1" fontWeight="bold" color="primary">
+                [{groupedQuestions.truefalse.length} marks]
+              </Typography>
+            </Box>
           </Paper>
           
           {groupedQuestions.truefalse.map((question) => (
@@ -969,9 +998,30 @@ const renderGeneratedQuiz = () => {
       {groupedQuestions.fillinblanks.length > 0 && (
         <Box sx={{ mb: 4 }}>
           <Paper sx={{ p: 2, mb: 2, bgcolor: '#f8f8f8' }}>
-            <Typography variant="subtitle1" fontWeight="bold">
-              {shortAnswerInstructions.fillinblanks}
-            </Typography>
+            <Box sx={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center',
+              width: '100%' // Ensure full width
+            }}>
+              <Typography variant="subtitle1" fontWeight="bold" sx={{ flexGrow: 1 }}>
+                {shortAnswerInstructions.fillinblanks}
+              </Typography>
+              <Typography 
+                variant="subtitle1" 
+                fontWeight="bold" 
+                color="primary"
+                sx={{ 
+                  ml: 2, 
+                  backgroundColor: 'rgba(1, 30, 65, 0.08)', 
+                  padding: '4px 8px',
+                  borderRadius: '4px',
+                  display: 'inline-block'
+                }}
+              >
+                [{groupedQuestions.fillinblanks.length} marks]
+              </Typography>
+            </Box>
           </Paper>
           
           {/* Create a Set to track rendered question IDs */}
@@ -1007,9 +1057,14 @@ const renderGeneratedQuiz = () => {
       {groupedQuestions.shortAnswer.length > 0 && (
         <Box sx={{ mb: 4 }}>
           <Paper sx={{ p: 2, mb: 2, bgcolor: '#f8f8f8' }}>
-            <Typography variant="subtitle1" fontWeight="bold">
-              {shortAnswerInstructions.shortAnswer}
-            </Typography>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Typography variant="subtitle1" fontWeight="bold">
+                {shortAnswerInstructions.shortAnswer}
+              </Typography>
+              <Typography variant="subtitle1" fontWeight="bold" color="primary">
+                [{groupedQuestions.shortAnswer.length} marks]
+              </Typography>
+            </Box>
           </Paper>
           
           {groupedQuestions.shortAnswer.map((question) => (
@@ -1040,9 +1095,30 @@ const renderGeneratedQuiz = () => {
       {groupedQuestions.scrambled.length > 0 && (
         <Box sx={{ mb: 4 }}>
           <Paper sx={{ p: 2, mb: 2, bgcolor: '#f8f8f8' }}>
-            <Typography variant="subtitle1" fontWeight="bold">
-              {shortAnswerInstructions.scrambled}
-            </Typography>
+            <Box sx={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center',
+              width: '100%' // Ensure full width
+            }}>
+              <Typography variant="subtitle1" fontWeight="bold" sx={{ flexGrow: 1 }}>
+                {shortAnswerInstructions.scrambled}
+              </Typography>
+              <Typography 
+                variant="subtitle1" 
+                fontWeight="bold" 
+                color="primary"
+                sx={{ 
+                  ml: 2, 
+                  backgroundColor: 'rgba(1, 30, 65, 0.08)', 
+                  padding: '4px 8px',
+                  borderRadius: '4px',
+                  display: 'inline-block'
+                }}
+              >
+                [{groupedQuestions.scrambled.length} marks]
+              </Typography>
+            </Box>
           </Paper>
           
           {groupedQuestions.scrambled.map((question) => (
@@ -1073,9 +1149,14 @@ const renderGeneratedQuiz = () => {
       {groupedQuestions.other.length > 0 && (
         <Box sx={{ mb: 4 }}>
           <Paper sx={{ p: 2, mb: 2, bgcolor: '#f8f8f8' }}>
-            <Typography variant="subtitle1" fontWeight="bold">
-              {shortAnswerInstructions.other}
-            </Typography>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Typography variant="subtitle1" fontWeight="bold">
+                {shortAnswerInstructions.other}
+              </Typography>
+              <Typography variant="subtitle1" fontWeight="bold" color="primary">
+                [{groupedQuestions.other.length} marks]
+              </Typography>
+            </Box>
           </Paper>
           
           {groupedQuestions.other.map((question) => (
@@ -1106,9 +1187,14 @@ const renderGeneratedQuiz = () => {
       {groupedQuestions.oneWord?.length > 0 && (
         <Box sx={{ mb: 4 }}>
           <Paper sx={{ p: 2, mb: 2, bgcolor: '#f8f8f8' }}>
-            <Typography variant="subtitle1" fontWeight="bold">
-              {shortAnswerInstructions.oneWord}
-            </Typography>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Typography variant="subtitle1" fontWeight="bold">
+                {shortAnswerInstructions.oneWord}
+              </Typography>
+              <Typography variant="subtitle1" fontWeight="bold" color="primary">
+                [{groupedQuestions.oneWord.length} marks]
+              </Typography>
+            </Box>
           </Paper>
           
           {groupedQuestions.oneWord.map((question) => (
@@ -1139,9 +1225,14 @@ const renderGeneratedQuiz = () => {
       {groupedQuestions.describe?.length > 0 && (
         <Box sx={{ mb: 4 }}>
           <Paper sx={{ p: 2, mb: 2, bgcolor: '#f8f8f8' }}>
-            <Typography variant="subtitle1" fontWeight="bold">
-              {shortAnswerInstructions.describe}
-            </Typography>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Typography variant="subtitle1" fontWeight="bold">
+                {shortAnswerInstructions.describe}
+              </Typography>
+              <Typography variant="subtitle1" fontWeight="bold" color="primary">
+                [{groupedQuestions.describe.length} marks]
+              </Typography>
+            </Box>
           </Paper>
           
           {groupedQuestions.describe.map((question) => (
@@ -1172,9 +1263,14 @@ const renderGeneratedQuiz = () => {
       {groupedQuestions.jumbled?.length > 0 && (
         <Box sx={{ mb: 4 }}>
           <Paper sx={{ p: 2, mb: 2, bgcolor: '#f8f8f8' }}>
-            <Typography variant="subtitle1" fontWeight="bold">
-              {shortAnswerInstructions.jumbled}
-            </Typography>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Typography variant="subtitle1" fontWeight="bold">
+                {shortAnswerInstructions.jumbled}
+              </Typography>
+              <Typography variant="subtitle1" fontWeight="bold" color="primary">
+                [{groupedQuestions.jumbled.length} marks]
+              </Typography>
+            </Box>
           </Paper>
           
           {groupedQuestions.jumbled.map((question) => (
@@ -1205,9 +1301,14 @@ const renderGeneratedQuiz = () => {
       {groupedQuestions.punctuation?.length > 0 && (
         <Box sx={{ mb: 4 }}>
           <Paper sx={{ p: 2, mb: 2, bgcolor: '#f8f8f8' }}>
-            <Typography variant="subtitle1" fontWeight="bold">
-              {shortAnswerInstructions.punctuation}
-            </Typography>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Typography variant="subtitle1" fontWeight="bold">
+                {shortAnswerInstructions.punctuation}
+              </Typography>
+              <Typography variant="subtitle1" fontWeight="bold" color="primary">
+                [{groupedQuestions.punctuation.length} marks]
+              </Typography>
+            </Box>
           </Paper>
           
           {groupedQuestions.punctuation.map((question) => (
@@ -1449,6 +1550,25 @@ useEffect(() => {
       /* Add more space at the top of the print output */
       #quiz-section > .MuiBox-root:first-child {
         margin-top: 20px;
+      }
+    }
+    @media print {
+      .MuiTypography-root[color="primary"] {
+        color: #011E41 !important;
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
+      }
+    }
+    // Additional print styles
+    @media print {
+      /* Make sure the mark count background appears in print */
+      .MuiTypography-root[color="primary"] {
+        background-color: rgba(1, 30, 65, 0.08) !important;
+        color: #011E41 !important;
+        padding: 4px 8px !important;
+        border-radius: 4px !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
       }
     }
   `;
