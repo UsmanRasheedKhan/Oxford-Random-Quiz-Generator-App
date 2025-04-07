@@ -468,6 +468,7 @@ const loadBookStructure = async (bookId) => {
       options: ["", "", "", ""],
       correctOption: 0,
       shortAnswer: "",
+      blankAnswer: "",  // Add field for fill in the blanks
       isTrueAnswer: true
     });
     setIsNewQuestion(true);
@@ -545,6 +546,8 @@ const saveQuestion = async () => {
         correctOption: newQuestion.correctOption
       } : newQuestion.type === "short" ? {
         shortAnswer: newQuestion.shortAnswer.trim()
+      } : newQuestion.type === "fillinblanks" ? {
+        blankAnswer: newQuestion.blankAnswer.trim()
       } : {
         isTrueAnswer: newQuestion.isTrueAnswer
       }),
@@ -1097,7 +1100,10 @@ const parseCSVFile = async () => {
                                               )}
                                             </Box>
                                           }
-                                          subheader={question.type === "multiple" ? "Multiple Choice" : question.type === "short" ? "Short Answer" : "True/False"}
+                                          subheader={question.type === "multiple" ? "Multiple Choice" : 
+                                                     question.type === "short" ? "Short Answer" : 
+                                                     question.type === "fillinblanks" ? "Fill in the Blanks" :
+                                                     "True/False"}
                                           action={
                                             <Box>
                                               <IconButton
@@ -1143,6 +1149,14 @@ const parseCSVFile = async () => {
                                             <Box sx={{ mt: 1, fontStyle: 'italic', color: 'text.secondary' }}>
                                               <Typography variant="body2">
                                                 Correct answer: {question.shortAnswer}
+                                              </Typography>
+                                            </Box>
+                                          )}
+
+                                          {question.type === "fillinblanks" && (
+                                            <Box sx={{ mt: 1, fontStyle: 'italic', color: 'text.secondary' }}>
+                                              <Typography variant="body2">
+                                                Blank should be filled with: {question.blankAnswer}
                                               </Typography>
                                             </Box>
                                           )}
@@ -1226,6 +1240,11 @@ const parseCSVFile = async () => {
                   label="Short Answer" 
                 />
                 <FormControlLabel 
+                  value="fillinblanks" 
+                  control={<Radio />} 
+                  label="Fill in the Blanks" 
+                />
+                <FormControlLabel 
                   value="truefalse" 
                   control={<Radio />} 
                   label="True/False" 
@@ -1265,6 +1284,16 @@ const parseCSVFile = async () => {
                 label="Correct Answer"
                 value={newQuestion.shortAnswer}
                 onChange={(e) => setNewQuestion({...newQuestion, shortAnswer: e.target.value})}
+              />
+            )}
+
+            {newQuestion.type === "fillinblanks" && (
+              <TextField
+                fullWidth
+                label="Correct Answer"
+                value={newQuestion.blankAnswer}
+                onChange={(e) => setNewQuestion({...newQuestion, blankAnswer: e.target.value})}
+                helperText="Enter the word or phrase that should fill in the blank"
               />
             )}
 

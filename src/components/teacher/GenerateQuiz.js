@@ -873,6 +873,11 @@ const renderGeneratedQuiz = () => {
               </Box>
             )}
 
+            {question.type === "fillinblanks" && (
+              // No additional UI elements needed - the question text already contains the blanks
+              null
+            )}
+
             {question.type === "truefalse" && (
               <Box sx={{ mt: 1, fontStyle: 'italic', color: 'text.secondary' }}>
                 <Typography variant="body2">
@@ -962,9 +967,11 @@ const handlePrintAnswerKey = () => {
               ? question.options[question.correctOption] 
               : question.type === "short" 
                 ? question.shortAnswer 
-                : question.isTrueAnswer 
-                  ? "True" 
-                  : "False"
+                : question.type === "fillinblanks"
+                  ? question.blankAnswer
+                  : question.isTrueAnswer 
+                    ? "True" 
+                    : "False"
           }</div>
           <div class="topic">Topic: ${question.chapterName} > ${question.topicName}</div>
         </div>
@@ -1017,6 +1024,9 @@ const saveQuizToDatabase = async () => {
         } 
         else if (q.type === "short") {
           questionData.shortAnswer = q.shortAnswer || '';
+        }
+        else if (q.type === "fillinblanks") {
+          questionData.blankAnswer = q.blankAnswer || '';
         }
         else if (q.type === "truefalse") {
           questionData.isTrueAnswer = q.isTrueAnswer === true;
