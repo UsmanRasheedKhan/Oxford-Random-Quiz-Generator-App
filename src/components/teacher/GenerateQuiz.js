@@ -4,7 +4,7 @@ import {
   InputLabel, Select, MenuItem, FormLabel, RadioGroup, FormControlLabel, 
   Radio, Checkbox, TextField, CircularProgress, Divider, Accordion,
   AccordionSummary, AccordionDetails, List, ListItem, ListItemIcon,
-  ListItemText, Alert, Card, CardHeader, CardContent
+  ListItemText, Alert, Card, CardHeader, CardContent, Chip
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import { collection, query, where, getDocs, doc, getDoc, addDoc, serverTimestamp } from "firebase/firestore";
@@ -55,6 +55,21 @@ const GenerateQuiz = () => {
   const [quizHeaders, setQuizHeaders] = useState({ title: "", description: "" });
   const [showTopicNames, setShowTopicNames] = useState(true);
   const [success, setSuccess] = useState(null);
+
+  // 1. First, add state for short answer instructions
+  const [shortAnswerInstructions, setShortAnswerInstructions] = useState({
+    shortAnswer: "Answer the following questions briefly:",
+    fillinblanks: "Fill in the blanks with the correct words:",
+    scrambled: "Rewrite the following scrambled words correctly:",
+    other: "Answer the following questions:",
+    // Additional short answer types
+    oneWord: "Answer in one word only:",
+    describe: "Describe the following in brief:",
+    jumbled: "Rewrite these jumbled sentences correctly:",
+    punctuation: "Rewrite these sentences with proper punctuation and capitalization:"
+  });
+
+  const [selectedShortAnswerType, setSelectedShortAnswerType] = useState("shortAnswer");
 
   const handlePrintQuiz = () => {
     window.print(); // Directly trigger the print functionality
@@ -382,6 +397,13 @@ const GenerateQuiz = () => {
         }
       }
       
+      // Check if at least one question type is selected
+      if (!Object.values(selectedQuestionTypes).some(v => v)) {
+        setError("Please select at least one question type");
+        setLoading(false);
+        return;
+      }
+      
       if (quizType === "multiple" && !Object.values(selectedChapters).some(v => v)) {
         setError("Please select at least one chapter");
         setLoading(false);
@@ -467,15 +489,27 @@ const GenerateQuiz = () => {
           "questions"
         );
         
-        // Filter to only get approved questions
-        const questionsQuery = query(questionsRef, where("status", "==", "approved"));
+        // Filter to only get approved questions with selected types
+        const questionsQuery = query(
+          questionsRef, 
+          where("status", "==", "approved")
+        );
+        
         const questionsSnapshot = await getDocs(questionsQuery);
-        const questions = questionsSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-          chapterName: topic.chapterName,
-          topicName: topic.topicName
-        }));
+        const questions = questionsSnapshot.docs
+          .map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            chapterName: topic.chapterName,
+            topicName: topic.topicName
+          }))
+          // Filter questions by selected types
+          .filter(question => 
+            (question.type === "multiple" && selectedQuestionTypes.multiple) ||
+            (question.type === "short" && selectedQuestionTypes.short) ||
+            (question.type === "fillinblanks" && selectedQuestionTypes.fillinblanks) ||
+            (question.type === "truefalse" && selectedQuestionTypes.truefalse)
+          );
         
         allQuestions.push(...questions);
       }
@@ -763,6 +797,12 @@ const renderQuestionCount = () => (
 const renderGeneratedQuiz = () => {
   if (!generatedQuiz) return null;
 
+  // Group questions by type
+  const groupedQuestions = groupQuestionsByType(generatedQuiz.questions);
+  
+  // Calculate question numbers
+  let questionCounter = 1;
+
   return (
     <Box>
       {success && (
@@ -772,7 +812,7 @@ const renderGeneratedQuiz = () => {
       )}
     
       {/* Quiz header form */}
-      <Paper elevation={3} sx={{ p: 3, mb: 4, className: "no-print" }}>
+      <Paper elevation={3} sx={{ p: 3, mb: 4 }} className="no-print">
         <Typography variant="h6" sx={{ mb: 2, color: "#011E41" }}>
           Quiz Details
         </Typography>
@@ -841,53 +881,200 @@ const renderGeneratedQuiz = () => {
         Quiz Questions
       </Typography>
 
-      {/* Questions - will be printed */}
-      {generatedQuiz.questions.map((question, index) => (
-        <Card key={question.id} sx={{ mb: 3, boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }}>
-          <CardHeader
-            title={`Question ${index + 1}`}
-            subheader={showTopicNames ? `${question.chapterName} > ${question.topicName}` : null}
-            avatar={<QuizIcon sx={{ color: "#011E41" }} />}
-          />
-          <CardContent>
-            <Typography variant="body1" gutterBottom sx={{ fontWeight: 'medium' }}>
-              {question.text}
+      {/* Multiple Choice Questions Section */}
+      {groupedQuestions.multiple.length > 0 && (
+        <Box sx={{ mb: 4 }}>
+          <Paper sx={{ p: 2, mb: 2, bgcolor: '#f8f8f8' }}>
+            <Typography variant="subtitle1" fontWeight="bold">
+              Choose the correct answer from the options provided:
             </Typography>
-
-            {question.type === "multiple" && (
-              <List dense>
-                {question.options.map((option, optIndex) => (
-                  <ListItem key={optIndex}>
-                    <Radio disabled /> {/* Do not show the correct option */}
-                    <ListItemText primary={option} />
-                  </ListItem>
-                ))}
-              </List>
-            )}
-
-            {question.type === "short" && (
-              <Box sx={{ mt: 1, fontStyle: 'italic', color: 'text.secondary' }}>
-                <Typography variant="body2">
-                  <strong>Answer:</strong> __________________________
+          </Paper>
+          
+          {groupedQuestions.multiple.map((question) => (
+            <Card key={question.id} sx={{ mb: 3, boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }}>
+              <CardContent>
+                <Typography variant="body1" gutterBottom sx={{ fontWeight: 'medium' }}>
+                  {questionCounter++}. {question.text}
                 </Typography>
-              </Box>
-            )}
 
-            {question.type === "fillinblanks" && (
-              // No additional UI elements needed - the question text already contains the blanks
-              null
-            )}
+                <List dense>
+                  {question.options.map((option, optIndex) => (
+                    <ListItem key={optIndex}>
+                      <Radio disabled />
+                      <ListItemText primary={option} />
+                    </ListItem>
+                  ))}
+                </List>
 
-            {question.type === "truefalse" && (
-              <Box sx={{ mt: 1, fontStyle: 'italic', color: 'text.secondary' }}>
-                <Typography variant="body2">
-                  <strong>Answer:</strong> True / False
+                {showTopicNames && (
+                  <Typography variant="caption" color="text.secondary">
+                    {question.chapterName} > {question.topicName}
+                  </Typography>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </Box>
+      )}
+
+      {/* True/False Questions Section */}
+      {groupedQuestions.truefalse.length > 0 && (
+        <Box sx={{ mb: 4 }}>
+          <Paper sx={{ p: 2, mb: 2, bgcolor: '#f8f8f8' }}>
+            <Typography variant="subtitle1" fontWeight="bold">
+              State whether the following statements are true or false:
+            </Typography>
+          </Paper>
+          
+          {groupedQuestions.truefalse.map((question) => (
+            <Card key={question.id} sx={{ mb: 3, boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }}>
+              <CardContent>
+                <Typography variant="body1" gutterBottom sx={{ fontWeight: 'medium' }}>
+                  {questionCounter++}. {question.text}
                 </Typography>
-              </Box>
-            )}
-          </CardContent>
-        </Card>
-      ))}
+
+                <Box sx={{ ml: 3 }}>
+                  <Typography variant="body2">
+                    True _____ False _____
+                  </Typography>
+                </Box>
+
+                {showTopicNames && (
+                  <Typography variant="caption" color="text.secondary">
+                    {question.chapterName} > {question.topicName}
+                  </Typography>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </Box>
+      )}
+
+      {/* Fill in the Blanks Section */}
+      {groupedQuestions.fillinblanks.length > 0 && (
+        <Box sx={{ mb: 4 }}>
+          <Paper sx={{ p: 2, mb: 2, bgcolor: '#f8f8f8' }}>
+            <Typography variant="subtitle1" fontWeight="bold">
+              {shortAnswerInstructions.fillinblanks}
+            </Typography>
+          </Paper>
+          
+          {groupedQuestions.fillinblanks.map((question) => (
+            <Card key={question.id} sx={{ mb: 3, boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }}>
+              <CardContent>
+                <Typography variant="body1" gutterBottom sx={{ fontWeight: 'medium' }}>
+                  {questionCounter++}. {question.text}
+                </Typography>
+
+                {showTopicNames && (
+                  <Typography variant="caption" color="text.secondary">
+                    {question.chapterName} > {question.topicName}
+                  </Typography>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </Box>
+      )}
+
+      {/* Short Answer Questions Section */}
+      {groupedQuestions.shortAnswer.length > 0 && (
+        <Box sx={{ mb: 4 }}>
+          <Paper sx={{ p: 2, mb: 2, bgcolor: '#f8f8f8' }}>
+            <Typography variant="subtitle1" fontWeight="bold">
+              {shortAnswerInstructions.shortAnswer}
+            </Typography>
+          </Paper>
+          
+          {groupedQuestions.shortAnswer.map((question) => (
+            <Card key={question.id} sx={{ mb: 3, boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }}>
+              <CardContent>
+                <Typography variant="body1" gutterBottom sx={{ fontWeight: 'medium' }}>
+                  {questionCounter++}. {question.text}
+                </Typography>
+
+                <Box sx={{ mt: 2, mb: 1 }}>
+                  <Typography variant="body2">
+                    ___________________________________________________________
+                  </Typography>
+                </Box>
+
+                {showTopicNames && (
+                  <Typography variant="caption" color="text.secondary">
+                    {question.chapterName} > {question.topicName}
+                  </Typography>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </Box>
+      )}
+
+      {/* Scrambled Words Section */}
+      {groupedQuestions.scrambled.length > 0 && (
+        <Box sx={{ mb: 4 }}>
+          <Paper sx={{ p: 2, mb: 2, bgcolor: '#f8f8f8' }}>
+            <Typography variant="subtitle1" fontWeight="bold">
+              {shortAnswerInstructions.scrambled}
+            </Typography>
+          </Paper>
+          
+          {groupedQuestions.scrambled.map((question) => (
+            <Card key={question.id} sx={{ mb: 3, boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }}>
+              <CardContent>
+                <Typography variant="body1" gutterBottom sx={{ fontWeight: 'medium' }}>
+                  {questionCounter++}. {question.text}
+                </Typography>
+
+                <Box sx={{ mt: 2, mb: 1 }}>
+                  <Typography variant="body2">
+                    ___________________________________________________________
+                  </Typography>
+                </Box>
+
+                {showTopicNames && (
+                  <Typography variant="caption" color="text.secondary">
+                    {question.chapterName} > {question.topicName}
+                  </Typography>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </Box>
+      )}
+
+      {/* Other Short Answer Questions */}
+      {groupedQuestions.other.length > 0 && (
+        <Box sx={{ mb: 4 }}>
+          <Paper sx={{ p: 2, mb: 2, bgcolor: '#f8f8f8' }}>
+            <Typography variant="subtitle1" fontWeight="bold">
+              {shortAnswerInstructions.other}
+            </Typography>
+          </Paper>
+          
+          {groupedQuestions.other.map((question) => (
+            <Card key={question.id} sx={{ mb: 3, boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }}>
+              <CardContent>
+                <Typography variant="body1" gutterBottom sx={{ fontWeight: 'medium' }}>
+                  {questionCounter++}. {question.text}
+                </Typography>
+
+                <Box sx={{ mt: 2, mb: 1 }}>
+                  <Typography variant="body2">
+                    ___________________________________________________________
+                  </Typography>
+                </Box>
+
+                {showTopicNames && (
+                  <Typography variant="caption" color="text.secondary">
+                    {question.chapterName} > {question.topicName}
+                  </Typography>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </Box>
+      )}
 
       {/* Action buttons - will not be printed */}
       <Box sx={{ mt: 4, mb: 2, display: 'flex', justifyContent: 'center', className: "no-print" }}>
@@ -1078,15 +1265,32 @@ useEffect(() => {
   const style = document.createElement('style');
   style.textContent = `
     @media print {
-      .no-print, button, .MuiAppBar-root, header, nav, footer {
+      .no-print, 
+      button, 
+      .MuiAppBar-root, 
+      header, 
+      nav, 
+      footer,
+      [class*="no-print"] {
         display: none !important;
       }
+
+      .MuiPaper-root.no-print {
+        display: none !important;
+      }
+
       body {
         padding: 0;
         margin: 0;
       }
+      
       #quiz-section {
         padding: 0;
+      }
+
+      /* Add more space at the top of the print output */
+      #quiz-section > .MuiBox-root:first-child {
+        margin-top: 20px;
       }
     }
   `;
@@ -1096,6 +1300,292 @@ useEffect(() => {
     document.head.removeChild(style);
   };
 }, []);
+
+// 2. Add a function to group questions by type
+const groupQuestionsByType = (questions) => {
+  const grouped = {
+    multiple: [],
+    truefalse: [],
+    fillinblanks: [],
+    shortAnswer: [],
+    scrambled: [],
+    other: []
+  };
+  
+  questions.forEach(question => {
+    if (question.type === "multiple") {
+      grouped.multiple.push(question);
+    } else if (question.type === "truefalse") {
+      grouped.truefalse.push(question);
+    } else if (question.type === "fillinblanks") {
+      grouped.fillinblanks.push(question);
+    } else if (question.type === "short") {
+      // Use instructionType if available, otherwise default to "shortAnswer"
+      const type = question.instructionType || "shortAnswer";
+      if (grouped[type]) {
+        grouped[type].push(question);
+      } else {
+        grouped.other.push(question);
+      }
+    }
+  });
+  
+  return grouped;
+};
+
+// 4. Add UI for customizing short answer instructions
+const renderInstructionsCustomization = () => (
+  <Paper elevation={3} sx={{ p: 3, mb: 4, className: "no-print" }}>
+    <Typography variant="h6" sx={{ mb: 2, color: "#011E41" }}>
+      Customize Instructions
+    </Typography>
+    
+    <Grid container spacing={2}>
+      <Grid item xs={12}>
+        <TextField
+          fullWidth
+          label="Multiple Choice Instruction"
+          value="Choose the correct answer from the options provided:"
+          onChange={(e) => {/* You can make this editable if needed */}}
+          variant="outlined"
+          sx={{ mb: 2 }}
+        />
+      </Grid>
+      
+      <Grid item xs={12}>
+        <TextField
+          fullWidth
+          label="True/False Instruction"
+          value="State whether the following statements are true or false:"
+          onChange={(e) => {/* You can make this editable if needed */}}
+          variant="outlined"
+          sx={{ mb: 2 }}
+        />
+      </Grid>
+      
+      <Grid item xs={12}>
+        <TextField
+          fullWidth
+          label="Fill in the Blanks Instruction"
+          value={shortAnswerInstructions.fillinblanks}
+          onChange={(e) => setShortAnswerInstructions({
+            ...shortAnswerInstructions,
+            fillinblanks: e.target.value
+          })}
+          variant="outlined"
+          sx={{ mb: 2 }}
+        />
+      </Grid>
+      
+      <Grid item xs={12}>
+        <Divider sx={{ my: 2 }}>
+          <Chip label="Short Answer Type Instructions" />
+        </Divider>
+      </Grid>
+      
+      <Grid item xs={12}>
+        <TextField
+          fullWidth
+          label="Regular Short Answer Instruction"
+          value={shortAnswerInstructions.shortAnswer}
+          onChange={(e) => setShortAnswerInstructions({
+            ...shortAnswerInstructions,
+            shortAnswer: e.target.value
+          })}
+          variant="outlined"
+          sx={{ mb: 2 }}
+        />
+      </Grid>
+      
+      <Grid item xs={12}>
+        <TextField
+          fullWidth
+          label="One Word Answer Instruction"
+          value={shortAnswerInstructions.oneWord}
+          onChange={(e) => setShortAnswerInstructions({
+            ...shortAnswerInstructions,
+            oneWord: e.target.value
+          })}
+          variant="outlined"
+          sx={{ mb: 2 }}
+        />
+      </Grid>
+      
+      <Grid item xs={12}>
+        <TextField
+          fullWidth
+          label="Description Instruction"
+          value={shortAnswerInstructions.describe}
+          onChange={(e) => setShortAnswerInstructions({
+            ...shortAnswerInstructions,
+            describe: e.target.value
+          })}
+          variant="outlined"
+          sx={{ mb: 2 }}
+        />
+      </Grid>
+      
+      <Grid item xs={12}>
+        <TextField
+          fullWidth
+          label="Jumbled Sentences Instruction"
+          value={shortAnswerInstructions.jumbled}
+          onChange={(e) => setShortAnswerInstructions({
+            ...shortAnswerInstructions,
+            jumbled: e.target.value
+          })}
+          variant="outlined"
+          sx={{ mb: 2 }}
+        />
+      </Grid>
+      
+      <Grid item xs={12}>
+        <TextField
+          fullWidth
+          label="Punctuation & Capitalization Instruction"
+          value={shortAnswerInstructions.punctuation}
+          onChange={(e) => setShortAnswerInstructions({
+            ...shortAnswerInstructions,
+            punctuation: e.target.value
+          })}
+          variant="outlined"
+          sx={{ mb: 2 }}
+        />
+      </Grid>
+      
+      <Grid item xs={12}>
+        <TextField
+          fullWidth
+          label="Scrambled Words Instruction"
+          value={shortAnswerInstructions.scrambled}
+          onChange={(e) => setShortAnswerInstructions({
+            ...shortAnswerInstructions,
+            scrambled: e.target.value
+          })}
+          variant="outlined"
+          sx={{ mb: 2 }}
+        />
+      </Grid>
+      
+      <Grid item xs={12}>
+        <TextField
+          fullWidth
+          label="Other Question Types Instruction"
+          value={shortAnswerInstructions.other}
+          onChange={(e) => setShortAnswerInstructions({
+            ...shortAnswerInstructions,
+            other: e.target.value
+          })}
+          variant="outlined"
+        />
+      </Grid>
+    </Grid>
+  </Paper>
+);
+
+// 1. Add state for question type selection
+const [selectedQuestionTypes, setSelectedQuestionTypes] = useState({
+  multiple: true,
+  short: true,
+  fillinblanks: true,
+  truefalse: true
+});
+
+// 3. Add a new component to select question types
+const renderQuestionTypeFilter = () => (
+  <Paper elevation={3} sx={{ p: 3, mb: 4 }}>
+    <Typography variant="h6" sx={{ mb: 2, color: "#011E41" }}>Question Types to Include</Typography>
+    <Typography variant="body2" sx={{ mb: 2, color: "text.secondary" }}>
+      Select at least one question type to include in the quiz:
+    </Typography>
+    
+    <Grid container spacing={2}>
+      <Grid item xs={12} sm={3}>
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={selectedQuestionTypes.multiple}
+              onChange={(e) => {
+                const newValue = e.target.checked;
+                setSelectedQuestionTypes(prev => {
+                  // If this would uncheck the last selected type, prevent it
+                  if (!newValue && !prev.short && !prev.fillinblanks && !prev.truefalse) {
+                    return prev;
+                  }
+                  return { ...prev, multiple: newValue };
+                });
+              }}
+            />
+          }
+          label="Multiple Choice"
+        />
+      </Grid>
+      
+      <Grid item xs={12} sm={3}>
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={selectedQuestionTypes.short}
+              onChange={(e) => {
+                const newValue = e.target.checked;
+                setSelectedQuestionTypes(prev => {
+                  // If this would uncheck the last selected type, prevent it
+                  if (!newValue && !prev.multiple && !prev.fillinblanks && !prev.truefalse) {
+                    return prev;
+                  }
+                  return { ...prev, short: newValue };
+                });
+              }}
+            />
+          }
+          label="Short Answer"
+        />
+      </Grid>
+      
+      <Grid item xs={12} sm={3}>
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={selectedQuestionTypes.fillinblanks}
+              onChange={(e) => {
+                const newValue = e.target.checked;
+                setSelectedQuestionTypes(prev => {
+                  // If this would uncheck the last selected type, prevent it
+                  if (!newValue && !prev.multiple && !prev.short && !prev.truefalse) {
+                    return prev;
+                  }
+                  return { ...prev, fillinblanks: newValue };
+                });
+              }}
+            />
+          }
+          label="Fill in the Blanks"
+        />
+      </Grid>
+      
+      <Grid item xs={12} sm={3}>
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={selectedQuestionTypes.truefalse}
+              onChange={(e) => {
+                const newValue = e.target.checked;
+                setSelectedQuestionTypes(prev => {
+                  // If this would uncheck the last selected type, prevent it
+                  if (!newValue && !prev.multiple && !prev.short && !prev.fillinblanks) {
+                    return prev;
+                  }
+                  return { ...prev, truefalse: newValue };
+                });
+              }}
+            />
+          }
+          label="True/False"
+        />
+      </Grid>
+    </Grid>
+  </Paper>
+);
 
 // Fix the return statement
 return (
@@ -1131,14 +1621,10 @@ return (
       {!loading && step === 2 && (
         <>
           {renderQuizTypeSelection()}
-          <Alert severity="info" sx={{ mb: 3 }}>
-            <Typography variant="body2">
-              <strong>Note:</strong> Only questions approved by administrators will be included in the quiz. 
-              If you've recently submitted questions, they may not appear until they've been reviewed.
-            </Typography>
-          </Alert>
           {renderTopicSelection()}
+          {renderQuestionTypeFilter()} {/* Add this new component */}
           {renderQuestionCount()}
+          {renderInstructionsCustomization()} {/* Use the updated component */}
           
           <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
             <Button

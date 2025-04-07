@@ -36,7 +36,8 @@ import {
   CardContent,
   Grid,
   Chip,
-  Checkbox
+  Checkbox,
+  FormHelperText
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import { 
@@ -98,6 +99,205 @@ const QuestionBank = () => {
   const [bulkUploadFile, setBulkUploadFile] = useState(null);
   const [bulkUploadQuestions, setBulkUploadQuestions] = useState([]);
   const [bulkUploadError, setBulkUploadError] = useState("");
+
+  // 1. First, update the state to support custom instruction types
+  const [shortAnswerInstructions, setShortAnswerInstructions] = useState({
+    shortAnswer: "Answer the following questions briefly:",
+    fillinblanks: "Fill in the blanks with the correct words:",
+    scrambled: "Rewrite the following scrambled words correctly:",
+    other: "Answer the following questions:",
+    // Default custom types
+    oneWord: "Answer in one word only:",
+    describe: "Describe the following in brief:",
+    jumbled: "Rewrite these jumbled sentences correctly:",
+    punctuation: "Rewrite these sentences with proper punctuation and capitalization:"
+  });
+
+  // 2. Add state to manage custom instruction types
+  const [customInstructionTypes, setCustomInstructionTypes] = useState([
+    "oneWord", "describe", "jumbled", "punctuation"
+  ]);
+  const [newCustomType, setNewCustomType] = useState(""); // For adding new types
+
+  // 3. Update the grouping function to handle custom instruction types
+const groupQuestionsByType = (questions) => {
+  // Create initial structure with standard types
+  const grouped = {
+    multiple: [],
+    truefalse: [],
+    fillinblanks: [],
+    shortAnswer: [],
+    scrambled: [],
+    other: []
+  };
+  
+  // Add custom instruction types to grouped object
+  customInstructionTypes.forEach(type => {
+    grouped[type] = [];
+  });
+  
+  // Group questions by their types
+  questions.forEach(question => {
+    if (question.type === "multiple") {
+      grouped.multiple.push(question);
+    } else if (question.type === "truefalse") {
+      grouped.truefalse.push(question);
+    } else if (question.type === "fillinblanks") {
+      grouped.fillinblanks.push(question);
+    } else if (question.type === "short") {
+      // Check if question has a custom instruction type
+      const instructionType = question.instructionType || "shortAnswer";
+      
+      // If this type exists in our grouped object, add it there
+      if (grouped[instructionType]) {
+        grouped[instructionType].push(question);
+      } else {
+        // Default to "other" if we don't recognize the instruction type
+        grouped.other.push(question);
+      }
+    }
+  });
+  
+  return grouped;
+};
+
+  // 4. Create a component to manage custom instruction types
+const renderCustomInstructionsEditor = () => (
+  <Paper elevation={3} sx={{ p: 3, mb: 4, className: "no-print" }}>
+    <Typography variant="h6" sx={{ mb: 2, color: "#011E41" }}>
+      Manage Short Answer Question Types
+    </Typography>
+    
+    <Typography variant="body2" sx={{ mb: 2 }}>
+      You can create different types of short answer questions with specific instructions.
+      Each type will be grouped together in the quiz with its own instruction header.
+    </Typography>
+    
+    <Grid container spacing={2}>
+      {/* Standard types */}
+      <Grid item xs={12}>
+        <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mb: 1 }}>
+          Standard Question Types
+        </Typography>
+      </Grid>
+      
+      <Grid item xs={12}>
+        <TextField
+          fullWidth
+          label="Short Answer Instruction"
+          value={shortAnswerInstructions.shortAnswer}
+          onChange={(e) => setShortAnswerInstructions({
+            ...shortAnswerInstructions,
+            shortAnswer: e.target.value
+          })}
+          variant="outlined"
+          sx={{ mb: 2 }}
+        />
+      </Grid>
+      
+      <Grid item xs={12}>
+        <TextField
+          fullWidth
+          label="Fill in the Blanks Instruction"
+          value={shortAnswerInstructions.fillinblanks}
+          onChange={(e) => setShortAnswerInstructions({
+            ...shortAnswerInstructions,
+            fillinblanks: e.target.value
+          })}
+          variant="outlined"
+          sx={{ mb: 2 }}
+        />
+      </Grid>
+      
+      <Grid item xs={12}>
+        <TextField
+          fullWidth
+          label="Scrambled Words Instruction"
+          value={shortAnswerInstructions.scrambled}
+          onChange={(e) => setShortAnswerInstructions({
+            ...shortAnswerInstructions,
+            scrambled: e.target.value
+          })}
+          variant="outlined"
+          sx={{ mb: 2 }}
+        />
+      </Grid>
+      
+      <Grid item xs={12}>
+        <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mt: 2, mb: 1 }}>
+          Custom Short Answer Types
+        </Typography>
+      </Grid>
+      
+      {/* Custom types */}
+      {customInstructionTypes.map((type, index) => (
+        <Grid item xs={12} key={type}>
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+            <TextField
+              fullWidth
+              label={`Custom Type: ${type}`}
+              value={shortAnswerInstructions[type] || ""}
+              onChange={(e) => setShortAnswerInstructions({
+                ...shortAnswerInstructions,
+                [type]: e.target.value
+              })}
+              variant="outlined"
+            />
+            <Button 
+              color="error" 
+              onClick={() => {
+                // Remove this custom type
+                setCustomInstructionTypes(prev => prev.filter(t => t !== type));
+                // Also remove its instruction
+                setShortAnswerInstructions(prev => {
+                  const updated = {...prev};
+                  delete updated[type];
+                  return updated;
+                });
+              }}
+              sx={{ ml: 1 }}
+            >
+              Remove
+            </Button>
+          </Box>
+        </Grid>
+      ))}
+      
+      {/* Add new custom type */}
+      <Grid item xs={12}>
+        <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
+          <TextField
+            fullWidth
+            label="New Custom Type Key"
+            value={newCustomType}
+            onChange={(e) => setNewCustomType(e.target.value)}
+            placeholder="E.g. 'oneWord', 'jumbled', etc."
+            variant="outlined"
+            helperText="Enter a simple key name (no spaces)"
+          />
+          <Button 
+            color="primary" 
+            variant="contained"
+            disabled={!newCustomType.trim() || customInstructionTypes.includes(newCustomType)}
+            onClick={() => {
+              // Add new custom type
+              setCustomInstructionTypes(prev => [...prev, newCustomType]);
+              // Initialize with default instruction
+              setShortAnswerInstructions(prev => ({
+                ...prev,
+                [newCustomType]: `Answer the following ${newCustomType} questions:`
+              }));
+              setNewCustomType("");
+            }}
+            sx={{ ml: 1, height: 56 }}
+          >
+            Add
+          </Button>
+        </Box>
+      </Grid>
+    </Grid>
+  </Paper>
+);
 
   // Load user and their departments
   useEffect(() => {
@@ -450,6 +650,8 @@ const loadBookStructure = async (bookId) => {
       options: question.options || ["", "", "", ""],
       correctOption: question.correctOption || 0,
       shortAnswer: question.shortAnswer || "",
+      blankAnswer: question.blankAnswer || "",
+      instructionType: question.instructionType || "shortAnswer", // Add instruction type
       isTrueAnswer: question.isTrueAnswer || true
     });
     setIsNewQuestion(false);
@@ -468,7 +670,8 @@ const loadBookStructure = async (bookId) => {
       options: ["", "", "", ""],
       correctOption: 0,
       shortAnswer: "",
-      blankAnswer: "",  // Add field for fill in the blanks
+      blankAnswer: "",
+      instructionType: "shortAnswer", // Add default instruction type
       isTrueAnswer: true
     });
     setIsNewQuestion(true);
@@ -545,7 +748,8 @@ const saveQuestion = async () => {
         options: newQuestion.options.map(opt => opt.trim()),
         correctOption: newQuestion.correctOption
       } : newQuestion.type === "short" ? {
-        shortAnswer: newQuestion.shortAnswer.trim()
+        shortAnswer: newQuestion.shortAnswer.trim(),
+        instructionType: newQuestion.instructionType || "shortAnswer" // Include instruction type
       } : newQuestion.type === "fillinblanks" ? {
         blankAnswer: newQuestion.blankAnswer.trim()
       } : {
@@ -694,7 +898,44 @@ const parseCSVFile = async () => {
 
   try {
     const fileContent = await bulkUploadFile.text();
-    const rows = fileContent.split("\n").map((row) => row.split(","));
+    // Use a better CSV parsing approach to handle commas within quoted text
+    const rows = [];
+    let inQuotes = false;
+    let currentRow = [];
+    let currentField = '';
+    
+    for (let i = 0; i < fileContent.length; i++) {
+      const char = fileContent[i];
+      
+      if (char === '"') {
+        inQuotes = !inQuotes;
+        continue;
+      }
+      
+      if (char === ',' && !inQuotes) {
+        currentRow.push(currentField.trim());
+        currentField = '';
+        continue;
+      }
+      
+      if (char === '\n' && !inQuotes) {
+        currentRow.push(currentField.trim());
+        rows.push(currentRow);
+        currentRow = [];
+        currentField = '';
+        continue;
+      }
+      
+      currentField += char;
+    }
+    
+    // Handle the last field and row
+    if (currentField) {
+      currentRow.push(currentField.trim());
+      if (currentRow.length > 0) {
+        rows.push(currentRow);
+      }
+    }
 
     // Validate the header row
     const headers = rows[0];
@@ -707,28 +948,68 @@ const parseCSVFile = async () => {
       "Option 4",
       "Correct Option Index",
       "Short Answer",
+      "Blank Answer",
       "True/False Answer",
+      "Short Answer Type"
     ];
-    if (!headers || headers.length < expectedHeaders.length || !headers.every((header, index) => header.trim() === expectedHeaders[index])) {
-      setBulkUploadError("Invalid CSV format. Please ensure the headers match the required format.");
+
+    if (!headers || headers.length < 8) {
+      setBulkUploadError("Invalid CSV format. Please ensure the file has the correct headers and data format.");
       return;
     }
 
     // Skip the header row and parse the questions
-    const parsedQuestions = rows.slice(1).map((row) => ({
-      text: row[0]?.trim(),
-      type: row[1]?.trim(),
-      options: row.slice(2, 6).map((opt) => opt?.trim()), // Assuming 4 options for multiple-choice
-      correctOption: parseInt(row[6]?.trim(), 10), // Index of the correct option
-      shortAnswer: row[7]?.trim(), // For short answer questions
-      isTrueAnswer: row[8]?.trim()?.toLowerCase() === "true", // For true/false questions
-    }));
+    const parsedQuestions = rows.slice(1).map((row) => {
+      // Get the basic question data
+      const questionType = row[1]?.trim().toLowerCase();
+      
+      // Create the question object based on type
+      const question = {
+        text: row[0]?.trim(),
+        type: questionType,
+      };
+      
+      // Add type-specific data
+      if (questionType === "multiple") {
+        question.options = row.slice(2, 6).map(opt => opt?.trim() || ""); // Get all 4 options
+        question.correctOption = parseInt(row[6], 10) || 0; // Index of the correct option
+      } 
+      else if (questionType === "short") {
+        question.shortAnswer = row[7]?.trim() || "";
+        question.instructionType = row[10]?.trim() || "shortAnswer"; // Get the short answer type
+      }
+      else if (questionType === "fillinblanks") {
+        question.blankAnswer = row[8]?.trim() || "";
+      }
+      else if (questionType === "truefalse") {
+        // Make sure to explicitly set to true or false, not undefined
+        const value = row[9]?.trim()?.toLowerCase() || "";
+        question.isTrueAnswer = value === "true" ? true : false;
+      }
+      
+      return question;
+    });
 
-    // Filter out empty rows
-    const validQuestions = parsedQuestions.filter((question) => question.text);
+    // Filter out empty rows and validate
+    const validQuestions = parsedQuestions.filter((question) => {
+      if (!question.text) return false;
+      
+      // Type-specific validation
+      if (question.type === "multiple" && (!question.options || question.options.filter(Boolean).length < 2)) {
+        return false;
+      }
+      if (question.type === "short" && !question.shortAnswer) {
+        return false;
+      }
+      if (question.type === "fillinblanks" && !question.blankAnswer) {
+        return false;
+      }
+      
+      return true;
+    });
 
     setBulkUploadQuestions(validQuestions);
-    setBulkUploadError("");
+    setBulkUploadError(validQuestions.length === 0 ? "No valid questions found in the file." : "");
   } catch (error) {
     console.error("Error parsing CSV file:", error);
     setBulkUploadError("Failed to parse the file. Please ensure it is in the correct format.");
@@ -736,70 +1017,81 @@ const parseCSVFile = async () => {
 };
 
   // Save bulk questions to the appropriate topic in the book structure
-  const saveBulkQuestions = async () => {
-    try {
-      const { chapterId, topicId } = editingQuestion;
-      const formattedGrade = selectedGrade.replace(" ", "_");
+const saveBulkQuestions = async () => {
+  try {
+    const { chapterId, topicId } = editingQuestion;
+    const formattedGrade = selectedGrade.replace(" ", "_");
 
-      // Initialize a Firestore batch
-      const batch = writeBatch(db);
+    // Initialize a Firestore batch
+    const batch = writeBatch(db);
 
-      const questionsRef = collection(
-        db,
-        "books",
-        selectedDepartment,
-        "grades",
-        formattedGrade,
-        "books",
-        selectedBook,
-        "chapters",
-        chapterId,
-        "topics",
-        topicId,
-        "questions"
-      );
+    const questionsRef = collection(
+      db,
+      "books",
+      selectedDepartment,
+      "grades",
+      formattedGrade,
+      "books",
+      selectedBook,
+      "chapters",
+      chapterId,
+      "topics",
+      topicId,
+      "questions"
+    );
 
-      bulkUploadQuestions.forEach((question) => {
-        const questionData = {
-          text: question.text,
-          type: question.type,
-          ...(question.type === "multiple" ? {
-            options: question.options,
-            correctOption: question.correctOption,
-          } : question.type === "short" ? {
-            shortAnswer: question.shortAnswer,
-          } : {
-            isTrueAnswer: question.isTrueAnswer,
-          }),
-          author: currentUser.email,
-          createdAt: new Date(),
-          status: "pending", // Add pending status for new questions
-        };
+    bulkUploadQuestions.forEach((question) => {
+      // Create a base question object
+      const questionData = {
+        text: question.text,
+        type: question.type,
+        author: currentUser.email,
+        createdAt: new Date(),
+        status: "pending",
+      };
 
-        const newDocRef = doc(questionsRef); // Create a new document reference
-        batch.set(newDocRef, questionData); // Add the document to the batch
-      });
+      // Add type-specific fields only if they exist
+      if (question.type === "multiple") {
+        questionData.options = question.options || ["", "", "", ""];
+        questionData.correctOption = question.correctOption || 0;
+      } 
+      else if (question.type === "short") {
+        questionData.shortAnswer = question.shortAnswer || "";
+        questionData.instructionType = question.instructionType || "shortAnswer";
+      } 
+      else if (question.type === "fillinblanks") {
+        questionData.blankAnswer = question.blankAnswer || "";
+      }
+      else if (question.type === "truefalse") {
+        // Ensure isTrueAnswer is explicitly a boolean value
+        questionData.isTrueAnswer = question.isTrueAnswer === true;
+      }
 
-      // Commit the batch
-      await batch.commit();
+      const newDocRef = doc(questionsRef);
+      batch.set(newDocRef, questionData);
+    });
 
-      setToast({
-        open: true,
-        message: "Questions uploaded successfully and sent for approval.",
-        severity: "success",
-      });
+    await batch.commit();
 
-      setBulkUploadDialog(false);
-      await loadBookStructure(selectedBook); // Refresh the book structure
-    } catch (error) {
-      console.error("Error saving bulk questions:", error);
-      setToast({
-        open: true,
-        message: "Failed to upload questions: " + error.message,
-        severity: "error",
-      });
-    }
-  };
+    setToast({
+      open: true,
+      message: `${bulkUploadQuestions.length} questions uploaded successfully and sent for approval.`,
+      severity: "success",
+    });
+
+    setBulkUploadDialog(false);
+    setBulkUploadQuestions([]);
+    setBulkUploadFile(null);
+    await loadBookStructure(selectedBook);
+  } catch (error) {
+    console.error("Error saving bulk questions:", error);
+    setToast({
+      open: true,
+      message: "Failed to upload questions: " + error.message,
+      severity: "error",
+    });
+  }
+};
 
   // Handle closing the toast
   const handleCloseToast = () => {
@@ -968,7 +1260,7 @@ const parseCSVFile = async () => {
             {/* <Box sx={{ mb: 3 }}>
               <Alert severity="info" sx={{ mb: 2 }}>
                 <Typography variant="body2">
-                  <strong>Note:</strong> New questions require admin approval before they can be used in quizzes.
+                  <strong>Note:</strong> New questions require admin approval before they appear in quizzes.
                   Questions with <Chip size="small" label="Pending Approval" color="warning" sx={{ mx: 1, height: 20 }} />
                   status are awaiting administrator review.
                 </Typography>
@@ -1100,10 +1392,21 @@ const parseCSVFile = async () => {
                                               )}
                                             </Box>
                                           }
-                                          subheader={question.type === "multiple" ? "Multiple Choice" : 
-                                                     question.type === "short" ? "Short Answer" : 
-                                                     question.type === "fillinblanks" ? "Fill in the Blanks" :
-                                                     "True/False"}
+                                          subheader={
+                                            question.type === "multiple" ? "Multiple Choice" : 
+                                            question.type === "short" ? 
+                                              `Short Answer - ${
+                                                question.instructionType === "shortAnswer" ? "Brief Answer" :
+                                                question.instructionType === "oneWord" ? "One Word" :
+                                                question.instructionType === "describe" ? "Description" :
+                                                question.instructionType === "jumbled" ? "Jumbled Sentences" :
+                                                question.instructionType === "punctuation" ? "Punctuation" :
+                                                question.instructionType === "scrambled" ? "Scrambled Words" :
+                                                (question.instructionType || "Other")
+                                              }` :
+                                            question.type === "fillinblanks" ? "Fill in the Blanks" :
+                                            "True/False"
+                                          }
                                           action={
                                             <Box>
                                               <IconButton
@@ -1279,12 +1582,45 @@ const parseCSVFile = async () => {
             )}
             
             {newQuestion.type === "short" && (
-              <TextField
-                fullWidth
-                label="Correct Answer"
-                value={newQuestion.shortAnswer}
-                onChange={(e) => setNewQuestion({...newQuestion, shortAnswer: e.target.value})}
-              />
+              <>
+                <FormControl fullWidth sx={{ mb: 2 }}>
+                  <InputLabel>Question Subtype</InputLabel>
+                  <Select
+                    value={newQuestion.instructionType}
+                    onChange={(e) => setNewQuestion({...newQuestion, instructionType: e.target.value})}
+                    label="Question Subtype"
+                  >
+                    <MenuItem value="shortAnswer">Short Answer</MenuItem>
+                    <MenuItem value="oneWord">One Word Answer</MenuItem>
+                    <MenuItem value="describe">Description</MenuItem>
+                    <MenuItem value="jumbled">Jumbled Sentences</MenuItem>
+                    <MenuItem value="punctuation">Punctuation & Capitalization</MenuItem>
+                    <MenuItem value="scrambled">Scrambled Words</MenuItem>
+                    <MenuItem value="other">Other</MenuItem>
+                    {/* Include any additional custom types */}
+                    {customInstructionTypes.map(type => {
+                      // Skip types already in default list
+                      if (!["shortAnswer", "oneWord", "describe", "jumbled", 
+                          "punctuation", "scrambled", "other"].includes(type)) {
+                        return (
+                          <MenuItem key={type} value={type}>{type}</MenuItem>
+                        );
+                      }
+                      return null;
+                    }).filter(Boolean)}
+                  </Select>
+                  <FormHelperText>
+                    {shortAnswerInstructions[newQuestion.instructionType] || "Select question subtype"}
+                  </FormHelperText>
+                </FormControl>
+
+                <TextField
+                  fullWidth
+                  label="Correct Answer"
+                  value={newQuestion.shortAnswer}
+                  onChange={(e) => setNewQuestion({...newQuestion, shortAnswer: e.target.value})}
+                />
+              </>
             )}
 
             {newQuestion.type === "fillinblanks" && (
@@ -1345,8 +1681,48 @@ const parseCSVFile = async () => {
             Upload a CSV file with the following format:
           </Typography>
           <Typography variant="body2" sx={{ mb: 2, fontStyle: "italic" }}>
-            Question Text, Type (multiple/short/truefalse), Option 1, Option 2, Option 3, Option 4, Correct Option Index (0-3), Short Answer, True/False Answer
+            Question Text, Type (multiple/short/fillinblanks/truefalse), Option 1, Option 2, Option 3, Option 4, Correct Option Index (0-3), Short Answer, Blank Answer, True/False Answer, Short Answer Type
           </Typography>
+          
+          <Alert severity="info" sx={{ mb: 2 }}>
+            <Typography variant="body2" sx={{ mb: 1 }}>
+              <strong>Instructions:</strong>
+            </Typography>
+            <ul style={{ margin: 0, paddingLeft: '1.5rem' }}>
+              <li>For <strong>multiple choice</strong> questions: fill columns 1-7</li>
+              <li>For <strong>short answer</strong> questions: fill columns 1-2, 8, and 11 (type=short)</li>
+              <li>For <strong>fill in the blanks</strong> questions: fill columns 1-2 and 9 (type=fillinblanks)</li>
+              <li>For <strong>true/false</strong> questions: fill columns 1-2 and 10 (type=truefalse)</li>
+              <li>For <strong>Short Answer Type</strong> use: shortAnswer, oneWord, describe, jumbled, punctuation, scrambled, or other</li>
+            </ul>
+          </Alert>
+          
+          <Button 
+            variant="outlined" 
+            color="primary" 
+            sx={{ mb: 2 }}
+            onClick={() => {
+              // Create a CSV template for download
+              const template = 'Question Text,Type,Option 1,Option 2,Option 3,Option 4,Correct Option Index,Short Answer,Blank Answer,True/False Answer,Short Answer Type\n' +
+                'Sample multiple choice question,multiple,Option A,Option B,Option C,Option D,0,,,,""\n' +
+                'Sample short answer question,short,,,,,,Answer goes here,,,"shortAnswer"\n' + 
+                'Sample fill in blanks question,fillinblanks,,,,,,,answer word,,""\n' + 
+                'Sample true/false question,truefalse,,,,,,,,true,""\n';
+                
+              const blob = new Blob([template], { type: 'text/csv' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = 'question_template.csv';
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              URL.revokeObjectURL(url);
+            }}
+          >
+            Download Template
+          </Button>
+
           <TextField
             type="file"
             inputProps={{ accept: ".csv" }}
@@ -1354,11 +1730,13 @@ const parseCSVFile = async () => {
             onChange={handleFileChange}
             sx={{ mb: 2 }}
           />
+          
           {bulkUploadError && (
             <Alert severity="error" sx={{ mb: 2 }}>
               {bulkUploadError}
             </Alert>
           )}
+          
           <Button
             variant="outlined"
             onClick={parseCSVFile}
@@ -1366,6 +1744,7 @@ const parseCSVFile = async () => {
           >
             Parse File
           </Button>
+          
           {bulkUploadQuestions.length > 0 && (
             <Alert severity="success" sx={{ mb: 2 }}>
               {bulkUploadQuestions.length} questions parsed successfully.
