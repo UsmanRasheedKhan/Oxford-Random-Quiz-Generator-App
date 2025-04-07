@@ -473,6 +473,8 @@ const GenerateQuiz = () => {
       
       // Fetch questions from each topic
       const allQuestions = [];
+      const allQuestionIds = new Set(); // Track IDs to prevent duplicates
+      
       for (const topic of targetTopics) {
         const questionsRef = collection(
           db, 
@@ -489,29 +491,42 @@ const GenerateQuiz = () => {
           "questions"
         );
         
-        // Filter to only get approved questions with selected types
+        // Get approved questions
         const questionsQuery = query(
           questionsRef, 
           where("status", "==", "approved")
         );
         
         const questionsSnapshot = await getDocs(questionsQuery);
-        const questions = questionsSnapshot.docs
-          .map(doc => ({
-            id: doc.id,
-            ...doc.data(),
+        
+        // Filter questions and check for duplicates
+        questionsSnapshot.docs.forEach(doc => {
+          const questionId = doc.id;
+          
+          // Skip if we already have this question
+          if (allQuestionIds.has(questionId)) {
+            return;
+          }
+          
+          const questionData = doc.data();
+          
+          // Skip if question doesn't match selected types
+          if ((questionData.type === "multiple" && !selectedQuestionTypes.multiple) ||
+              (questionData.type === "short" && !selectedQuestionTypes.short) ||
+              (questionData.type === "fillinblanks" && !selectedQuestionTypes.fillinblanks) ||
+              (questionData.type === "truefalse" && !selectedQuestionTypes.truefalse)) {
+            return;
+          }
+          
+          // If we get here, this is a unique question of the right type, so add it
+          allQuestionIds.add(questionId);
+          allQuestions.push({
+            id: questionId,
+            ...questionData,
             chapterName: topic.chapterName,
             topicName: topic.topicName
-          }))
-          // Filter questions by selected types
-          .filter(question => 
-            (question.type === "multiple" && selectedQuestionTypes.multiple) ||
-            (question.type === "short" && selectedQuestionTypes.short) ||
-            (question.type === "fillinblanks" && selectedQuestionTypes.fillinblanks) ||
-            (question.type === "truefalse" && selectedQuestionTypes.truefalse)
-          );
-        
-        allQuestions.push(...questions);
+          });
+        });
       }
       
       // Add this check after all questions have been fetched
@@ -959,21 +974,32 @@ const renderGeneratedQuiz = () => {
             </Typography>
           </Paper>
           
-          {groupedQuestions.fillinblanks.map((question) => (
-            <Card key={question.id} sx={{ mb: 3, boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }}>
-              <CardContent>
-                <Typography variant="body1" gutterBottom sx={{ fontWeight: 'medium' }}>
-                  {questionCounter++}. {question.text}
-                </Typography>
+          {/* Create a Set to track rendered question IDs */}
+          {(() => {
+            const renderedIds = new Set();
+            return groupedQuestions.fillinblanks.map((question) => {
+              // Skip if already rendered
+              if (renderedIds.has(question.id)) return null;
+              // Add to rendered IDs
+              renderedIds.add(question.id);
+              
+              return (
+                <Card key={question.id} sx={{ mb: 3, boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }}>
+                  <CardContent>
+                    <Typography variant="body1" gutterBottom sx={{ fontWeight: 'medium' }}>
+                      {questionCounter++}. {question.text}
+                    </Typography>
 
-                {showTopicNames && (
-                  <Typography variant="caption" color="text.secondary">
-                    {question.chapterName} > {question.topicName}
-                  </Typography>
-                )}
-              </CardContent>
-            </Card>
-          ))}
+                    {showTopicNames && (
+                      <Typography variant="caption" color="text.secondary">
+                        {question.chapterName} > {question.topicName}
+                      </Typography>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            }).filter(Boolean); // Filter out null values from skipped duplicates
+          })()}
         </Box>
       )}
 
@@ -1053,6 +1079,138 @@ const renderGeneratedQuiz = () => {
           </Paper>
           
           {groupedQuestions.other.map((question) => (
+            <Card key={question.id} sx={{ mb: 3, boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }}>
+              <CardContent>
+                <Typography variant="body1" gutterBottom sx={{ fontWeight: 'medium' }}>
+                  {questionCounter++}. {question.text}
+                </Typography>
+
+                <Box sx={{ mt: 2, mb: 1 }}>
+                  <Typography variant="body2">
+                    ___________________________________________________________
+                  </Typography>
+                </Box>
+
+                {showTopicNames && (
+                  <Typography variant="caption" color="text.secondary">
+                    {question.chapterName} > {question.topicName}
+                  </Typography>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </Box>
+      )}
+
+      {/* One Word Answers Section */}
+      {groupedQuestions.oneWord?.length > 0 && (
+        <Box sx={{ mb: 4 }}>
+          <Paper sx={{ p: 2, mb: 2, bgcolor: '#f8f8f8' }}>
+            <Typography variant="subtitle1" fontWeight="bold">
+              {shortAnswerInstructions.oneWord}
+            </Typography>
+          </Paper>
+          
+          {groupedQuestions.oneWord.map((question) => (
+            <Card key={question.id} sx={{ mb: 3, boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }}>
+              <CardContent>
+                <Typography variant="body1" gutterBottom sx={{ fontWeight: 'medium' }}>
+                  {questionCounter++}. {question.text}
+                </Typography>
+
+                <Box sx={{ mt: 2, mb: 1 }}>
+                  <Typography variant="body2">
+                    ___________________________________________________________
+                  </Typography>
+                </Box>
+
+                {showTopicNames && (
+                  <Typography variant="caption" color="text.secondary">
+                    {question.chapterName} > {question.topicName}
+                  </Typography>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </Box>
+      )}
+
+      {/* Description Questions Section */}
+      {groupedQuestions.describe?.length > 0 && (
+        <Box sx={{ mb: 4 }}>
+          <Paper sx={{ p: 2, mb: 2, bgcolor: '#f8f8f8' }}>
+            <Typography variant="subtitle1" fontWeight="bold">
+              {shortAnswerInstructions.describe}
+            </Typography>
+          </Paper>
+          
+          {groupedQuestions.describe.map((question) => (
+            <Card key={question.id} sx={{ mb: 3, boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }}>
+              <CardContent>
+                <Typography variant="body1" gutterBottom sx={{ fontWeight: 'medium' }}>
+                  {questionCounter++}. {question.text}
+                </Typography>
+
+                <Box sx={{ mt: 2, mb: 1 }}>
+                  <Typography variant="body2">
+                    ___________________________________________________________
+                  </Typography>
+                </Box>
+
+                {showTopicNames && (
+                  <Typography variant="caption" color="text.secondary">
+                    {question.chapterName} > {question.topicName}
+                  </Typography>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </Box>
+      )}
+
+      {/* Jumbled Sentences Section */}
+      {groupedQuestions.jumbled?.length > 0 && (
+        <Box sx={{ mb: 4 }}>
+          <Paper sx={{ p: 2, mb: 2, bgcolor: '#f8f8f8' }}>
+            <Typography variant="subtitle1" fontWeight="bold">
+              {shortAnswerInstructions.jumbled}
+            </Typography>
+          </Paper>
+          
+          {groupedQuestions.jumbled.map((question) => (
+            <Card key={question.id} sx={{ mb: 3, boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }}>
+              <CardContent>
+                <Typography variant="body1" gutterBottom sx={{ fontWeight: 'medium' }}>
+                  {questionCounter++}. {question.text}
+                </Typography>
+
+                <Box sx={{ mt: 2, mb: 1 }}>
+                  <Typography variant="body2">
+                    ___________________________________________________________
+                  </Typography>
+                </Box>
+
+                {showTopicNames && (
+                  <Typography variant="caption" color="text.secondary">
+                    {question.chapterName} > {question.topicName}
+                  </Typography>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </Box>
+      )}
+
+      {/* Punctuation Questions Section */}
+      {groupedQuestions.punctuation?.length > 0 && (
+        <Box sx={{ mb: 4 }}>
+          <Paper sx={{ p: 2, mb: 2, bgcolor: '#f8f8f8' }}>
+            <Typography variant="subtitle1" fontWeight="bold">
+              {shortAnswerInstructions.punctuation}
+            </Typography>
+          </Paper>
+          
+          {groupedQuestions.punctuation.map((question) => (
             <Card key={question.id} sx={{ mb: 3, boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }}>
               <CardContent>
                 <Typography variant="body1" gutterBottom sx={{ fontWeight: 'medium' }}>
@@ -1303,30 +1461,62 @@ useEffect(() => {
 
 // 2. Add a function to group questions by type
 const groupQuestionsByType = (questions) => {
+  // Create tracking objects for each question type
   const grouped = {
     multiple: [],
     truefalse: [],
     fillinblanks: [],
     shortAnswer: [],
+    oneWord: [],
+    describe: [],
+    jumbled: [],
+    punctuation: [],
     scrambled: [],
     other: []
   };
   
+  // Keep track of ALL processed question IDs
+  const processedIds = new Set();
+  
+  // First pass - assign each question to one and only one group
   questions.forEach(question => {
+    // Skip if question has no ID or has already been processed
+    if (!question.id || processedIds.has(question.id)) {
+      return;
+    }
+    
+    // Add to processed IDs first thing to ensure no duplicates
+    processedIds.add(question.id);
+    
     if (question.type === "multiple") {
       grouped.multiple.push(question);
     } else if (question.type === "truefalse") {
       grouped.truefalse.push(question);
     } else if (question.type === "fillinblanks") {
+      // Explicitly handle fill-in-the-blanks questions
       grouped.fillinblanks.push(question);
     } else if (question.type === "short") {
-      // Use instructionType if available, otherwise default to "shortAnswer"
-      const type = question.instructionType || "shortAnswer";
-      if (grouped[type]) {
-        grouped[type].push(question);
+      const subtype = question.instructionType || "shortAnswer";
+      
+      // Handle each short answer subtype
+      if (subtype === "oneWord") {
+        grouped.oneWord.push(question);
+      } else if (subtype === "describe") {
+        grouped.describe.push(question);
+      } else if (subtype === "jumbled") {
+        grouped.jumbled.push(question);
+      } else if (subtype === "punctuation") {
+        grouped.punctuation.push(question);
+      } else if (subtype === "scrambled") {
+        grouped.scrambled.push(question);
+      } else if (subtype === "shortAnswer") {
+        grouped.shortAnswer.push(question);
       } else {
         grouped.other.push(question);
       }
+    } else {
+      // Unknown type
+      grouped.other.push(question);
     }
   });
   
