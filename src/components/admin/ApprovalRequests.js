@@ -14,6 +14,7 @@ import {
   Divider,
   Card,
   CardContent,
+  CardHeader, // Added missing import
   Chip,
   Checkbox,
   FormControlLabel,
@@ -36,22 +37,27 @@ import {
   Accordion,
   AccordionSummary,
   AccordionDetails,
+  List, // Added missing import
+  ListItem, // Added missing import
+  ListItemIcon, // Added missing import
+  ListItemText, // Added missing import
+  Radio, // Added missing import
   ExpandMore as ExpandMoreIcon, 
 } from '@mui/material';
 import {
   ArrowBack as BackIcon,
   Search as SearchIcon,
   FilterList as FilterIcon,
-  Check as ApproveIcon,
-  Close as RejectIcon,
+  Check as CheckIcon, // Added missing import
+  Close as CloseIcon,
   Info as InfoIcon,
   Refresh as RefreshIcon,
   Done as DoneAllIcon,
   Delete as DeleteIcon,
   Visibility as VisibilityIcon,
   Person as PersonIcon,
-  Close as CloseIcon,
   Save as SaveIcon,
+  Check as ApproveIcon, // Add ApproveIcon as alias for Check
 } from '@mui/icons-material';
 import { db } from '../../firebase';
 import { collection, query, where, getDocs, doc, updateDoc, getDoc, writeBatch, collectionGroup, setDoc } from 'firebase/firestore';
@@ -112,6 +118,25 @@ const ApprovalRequests = () => {
     }
     
     return {};
+  };
+
+  // Utility function to detect if text contains Urdu
+  const isUrduText = (text) => {
+    if (!text) return false;
+    
+    // Urdu Unicode range (approximate)
+    const urduPattern = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
+    
+    // Count characters that match Urdu pattern
+    let urduCharCount = 0;
+    for (let i = 0; i < text.length; i++) {
+      if (urduPattern.test(text[i])) {
+        urduCharCount++;
+      }
+    }
+    
+    // If more than 30% of characters are Urdu, consider it Urdu text
+    return urduCharCount / text.length > 0.3;
   };
 
   // Fetch departments on component mount
@@ -654,6 +679,191 @@ const ApprovalRequests = () => {
       setSaveLoading(false);
     }
   };
+
+  // Update question card display with RTL support for Urdu text
+  const QuestionCard = ({ question, onApprove, onReject }) => {
+    const isQuestionUrdu = isUrduText(question.text);
+    
+    return (
+      <Card sx={{ mb: 3, boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }}>
+        <CardHeader
+          title={
+            <Typography 
+              variant="h6" 
+              sx={{ 
+                direction: isQuestionUrdu ? 'rtl' : 'ltr',
+                textAlign: isQuestionUrdu ? 'right' : 'left',
+                fontFamily: isQuestionUrdu ? 'Noto Nastaliq Urdu, Arial' : 'inherit',
+                fontSize: isQuestionUrdu ? '1.2rem' : 'inherit'
+              }}
+            >
+              {question.text}
+            </Typography>
+          }
+          subheader={
+            <Box sx={{ mt: 1 }}>
+              <Chip 
+                label={`${question.type.charAt(0).toUpperCase() + question.type.slice(1)} Question`} 
+                size="small" 
+                color="primary" 
+                sx={{ mr: 1 }}
+              />
+              <Chip 
+                label={`${question.difficulty || 'Medium'} Difficulty`} 
+                size="small" 
+                color={
+                  question.difficulty === 'Easy' ? 'success' : 
+                  question.difficulty === 'Hard' ? 'error' : 'warning'
+                }
+              />
+            </Box>
+          }
+          action={
+            <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+              <Button
+                variant="contained"
+                color="success"
+                size="small"
+                onClick={() => onApprove(question)}
+                startIcon={<CheckIcon />}
+              >
+                Approve
+              </Button>
+              <Button
+                variant="contained"
+                color="error"
+                size="small"
+                onClick={() => onReject(question)}
+                startIcon={<CloseIcon />}
+              >
+                Reject
+              </Button>
+            </Box>
+          }
+        />
+        <CardContent>
+          {/* Multiple choice question */}
+          {question.type === "multiple" && (
+            <List dense sx={{ pt: 0 }}>
+              {question.options.map((option, index) => {
+                const isOptionUrdu = isUrduText(option);
+                const isCorrect = index === question.correctOption;
+                
+                return (
+                  <ListItem 
+                    key={index}
+                    sx={{ 
+                      bgcolor: isCorrect ? 'success.light' : 'transparent',
+                      borderRadius: 1,
+                      mb: 0.5,
+                      direction: isOptionUrdu ? 'rtl' : 'ltr',
+                      textAlign: isOptionUrdu ? 'right' : 'left'
+                    }}
+                  >
+                    <ListItemIcon sx={{ minWidth: 36 }}>
+                      <Radio
+                        checked={isCorrect}
+                        size="small"
+                        readOnly
+                        sx={{ 
+                          color: isCorrect ? 'success.main' : 'inherit',
+                          '&.Mui-checked': {
+                            color: 'success.main'
+                          }
+                        }}
+                      />
+                    </ListItemIcon>
+                    <ListItemText 
+                      primary={
+                        <Typography 
+                          sx={{ 
+                            fontWeight: isCorrect ? 'bold' : 'normal',
+                            fontFamily: isOptionUrdu ? 'Noto Nastaliq Urdu, Arial' : 'inherit',
+                            fontSize: isOptionUrdu ? '1.1rem' : 'inherit'
+                          }}
+                        >
+                          {option}
+                        </Typography>
+                      } 
+                    />
+                  </ListItem>
+                );
+              })}
+            </List>
+          )}
+          
+          {/* Short answer question */}
+          {question.type === "short" && (
+            <Typography 
+              variant="body1" 
+              sx={{ 
+                bgcolor: 'success.light', 
+                p: 1.5,
+                borderRadius: 1,
+                fontWeight: 'medium',
+                direction: isUrduText(question.shortAnswer) ? 'rtl' : 'ltr',
+                textAlign: isUrduText(question.shortAnswer) ? 'right' : 'left',
+                fontFamily: isUrduText(question.shortAnswer) ? 'Noto Nastaliq Urdu, Arial' : 'inherit',
+                fontSize: isUrduText(question.shortAnswer) ? '1.1rem' : 'inherit'
+              }}
+            >
+              Answer: {question.shortAnswer}
+            </Typography>
+          )}
+          
+          {/* Fill in the blanks question */}
+          {question.type === "fillinblanks" && (
+            <Typography 
+              variant="body1" 
+              sx={{ 
+                bgcolor: 'success.light', 
+                p: 1.5,
+                borderRadius: 1,
+                fontWeight: 'medium',
+                direction: isUrduText(question.blankAnswer) ? 'rtl' : 'ltr',
+                textAlign: isUrduText(question.blankAnswer) ? 'right' : 'left',
+                fontFamily: isUrduText(question.blankAnswer) ? 'Noto Nastaliq Urdu, Arial' : 'inherit',
+                fontSize: isUrduText(question.blankAnswer) ? '1.1rem' : 'inherit'
+              }}
+            >
+              Blank answer: {question.blankAnswer}
+            </Typography>
+          )}
+          
+          {/* True/False question */}
+          {question.type === "truefalse" && (
+            <Typography 
+              variant="body1" 
+              sx={{ 
+                bgcolor: 'success.light', 
+                p: 1.5,
+                borderRadius: 1,
+                fontWeight: 'medium',
+                direction: isQuestionUrdu ? 'rtl' : 'ltr',
+                textAlign: isQuestionUrdu ? 'right' : 'left',
+                fontFamily: isQuestionUrdu ? 'Noto Nastaliq Urdu, Arial' : 'inherit',
+                fontSize: isQuestionUrdu ? '1.1rem' : 'inherit'
+              }}
+            >
+              Answer: {isQuestionUrdu 
+                ? (question.isTrueAnswer ? "صحیح" : "غلط")
+                : (question.isTrueAnswer ? "True" : "False")
+              }
+            </Typography>
+          )}
+          
+          <Box sx={{ mt: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography variant="caption" color="text.secondary">
+              Submitted by: {question.author}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {question.createdAt && new Date(question.createdAt.seconds * 1000).toLocaleString()}
+            </Typography>
+          </Box>
+        </CardContent>
+      </Card>
+    );
+  };
   
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -1015,7 +1225,7 @@ const ApprovalRequests = () => {
                   </Typography>
                 </Box>
                 
-                {/* Question Content - Now editable */}
+                {/* Question Content - Now editable with RTL support */}
                 <Box sx={{ p: 3, bgcolor: '#ffffff' }}>
                   {isEditing ? (
                     <TextField
@@ -1027,6 +1237,14 @@ const ApprovalRequests = () => {
                       onChange={(e) => setEditedQuestionText(e.target.value)}
                       placeholder="Question text"
                       sx={{ mb: 2 }}
+                      InputProps={{
+                        style: {
+                          direction: isUrduText(editedQuestionText) ? 'rtl' : 'ltr',
+                          textAlign: isUrduText(editedQuestionText) ? 'right' : 'left',
+                          fontFamily: isUrduText(editedQuestionText) ? 'Noto Nastaliq Urdu, Arial' : 'inherit',
+                          fontSize: isUrduText(editedQuestionText) ? '1.2rem' : 'inherit'
+                        }
+                      }}
                     />
                   ) : (
                     <Typography 
@@ -1035,12 +1253,28 @@ const ApprovalRequests = () => {
                         whiteSpace: 'pre-wrap', 
                         lineHeight: 1.6,
                         color: '#333333',
-                        fontSize: '1.05rem'
+                        fontSize: '1.05rem',
+                        direction: isUrduText(currentQuestion.text) ? 'rtl' : 'ltr',
+                        textAlign: isUrduText(currentQuestion.text) ? 'right' : 'left',
+                        fontFamily: isUrduText(currentQuestion.text) ? 'Noto Nastaliq Urdu, Arial' : 'inherit',
+                        fontSize: isUrduText(currentQuestion.text) ? '1.2rem' : 'inherit'
                       }}
                     >
                       {currentQuestion.text || "No question text provided"}
                     </Typography>
                   )}
+                  
+                  {/* Show question difficulty */}
+                  <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', justifyContent: isUrduText(currentQuestion.text) ? 'flex-end' : 'flex-start' }}>
+                    <Chip 
+                      label={`${currentQuestion.difficulty || 'Medium'} Difficulty`} 
+                      size="small" 
+                      color={
+                        currentQuestion.difficulty === 'Easy' ? 'success' : 
+                        currentQuestion.difficulty === 'Hard' ? 'error' : 'warning'
+                      }
+                    />
+                  </Box>
                 </Box>
               </Paper>
 
@@ -1124,7 +1358,7 @@ const ApprovalRequests = () => {
                 </>
               )}
 
-              {/* Short Answer Question */}
+              {/* Short Answer Question with RTL support */}
               {currentQuestion && currentQuestion.type === 'short' && (
                 <Box sx={{ mb: 3 }}>
                   <Typography variant="subtitle1" fontWeight="bold" sx={{ mb: 1.5 }}>
@@ -1141,6 +1375,14 @@ const ApprovalRequests = () => {
                       onChange={(e) => setEditedAnswerText(e.target.value)}
                       placeholder="Correct answer"
                       sx={{ mb: 2 }}
+                      InputProps={{
+                        style: {
+                          direction: isUrduText(editedAnswerText) ? 'rtl' : 'ltr',
+                          textAlign: isUrduText(editedAnswerText) ? 'right' : 'left',
+                          fontFamily: isUrduText(editedAnswerText) ? 'Noto Nastaliq Urdu, Arial' : 'inherit',
+                          fontSize: isUrduText(editedAnswerText) ? '1.2rem' : 'inherit'
+                        }
+                      }}
                     />
                   ) : (
                     <Paper 
@@ -1152,7 +1394,16 @@ const ApprovalRequests = () => {
                         borderWidth: 2
                       }}
                     >
-                      <Typography variant="body1" sx={{ fontWeight: 'medium' }}>
+                      <Typography 
+                        variant="body1" 
+                        sx={{ 
+                          fontWeight: 'medium',
+                          direction: isUrduText(currentQuestion.shortAnswer) ? 'rtl' : 'ltr',
+                          textAlign: isUrduText(currentQuestion.shortAnswer) ? 'right' : 'left',
+                          fontFamily: isUrduText(currentQuestion.shortAnswer) ? 'Noto Nastaliq Urdu, Arial' : 'inherit',
+                          fontSize: isUrduText(currentQuestion.shortAnswer) ? '1.2rem' : 'inherit'
+                        }}
+                      >
                         {currentQuestion.shortAnswer || "No answer provided"}
                       </Typography>
                     </Paper>
@@ -1160,14 +1411,14 @@ const ApprovalRequests = () => {
                 </Box>
               )}
 
-              {/* True/False Question */}
+              {/* True/False Question - With Urdu support */}
               {currentQuestion && currentQuestion.type === 'truefalse' && (
                 <Box sx={{ mb: 3 }}>
                   <Typography variant="subtitle1" fontWeight="bold" sx={{ mb: 1.5 }}>
                     Correct Answer
                   </Typography>
                   
-                  <Box sx={{ display: 'flex', gap: 2 }}>
+                  <Box sx={{ display: 'flex', gap: 2, flexDirection: isUrduText(currentQuestion.text) ? 'row-reverse' : 'row' }}>
                     <Paper 
                       variant="outlined" 
                       sx={{ 
@@ -1182,8 +1433,12 @@ const ApprovalRequests = () => {
                       <Typography 
                         fontWeight={currentQuestion.isTrueAnswer === true ? 'bold' : 'normal'}
                         color={currentQuestion.isTrueAnswer === true ? 'success.main' : 'inherit'}
+                        sx={{
+                          fontFamily: isUrduText(currentQuestion.text) ? 'Noto Nastaliq Urdu, Arial' : 'inherit',
+                          fontSize: isUrduText(currentQuestion.text) ? '1.2rem' : 'inherit'
+                        }}
                       >
-                        TRUE
+                        {isUrduText(currentQuestion.text) ? "صحیح" : "TRUE"}
                       </Typography>
                     </Paper>
                     
@@ -1201,8 +1456,12 @@ const ApprovalRequests = () => {
                       <Typography 
                         fontWeight={currentQuestion.isTrueAnswer === false ? 'bold' : 'normal'}
                         color={currentQuestion.isTrueAnswer === false ? 'error.main' : 'inherit'}
+                        sx={{
+                          fontFamily: isUrduText(currentQuestion.text) ? 'Noto Nastaliq Urdu, Arial' : 'inherit',
+                          fontSize: isUrduText(currentQuestion.text) ? '1.2rem' : 'inherit'
+                        }}
                       >
-                        FALSE
+                        {isUrduText(currentQuestion.text) ? "غلط" : "FALSE"}
                       </Typography>
                     </Paper>
                   </Box>

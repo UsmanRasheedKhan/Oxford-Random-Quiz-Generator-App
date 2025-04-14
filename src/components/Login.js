@@ -23,6 +23,7 @@ import {
   VisibilityOff
 } from "@mui/icons-material";
 import oxfordLogo from '../assets/oxford-logo.png';
+import Dashboard from "./school-admin/Dashboard";
 
 const Login = () => {
   const [email, setEmail] = useState("");
@@ -77,8 +78,9 @@ const Login = () => {
           localStorage.setItem("user", userRole.toLowerCase());
           navigate("/teacher");
           break;
-        case "student":
-          navigate("/student");
+        case "school-admin":
+          localStorage.setItem("user", userRole.toLowerCase());
+          navigate("/school-admin");
           break;
         default:
           throw new Error(`Unknown role: ${userRole}`);

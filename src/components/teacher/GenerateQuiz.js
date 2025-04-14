@@ -899,7 +899,7 @@ const renderGeneratedQuiz = () => {
         Quiz Questions
       </Typography>
 
-      {/* Multiple Choice Questions Section */}
+      {/* Multiple Choice Questions Section with RTL support */}
       {groupedQuestions.multiple.length > 0 && (
         <Box sx={{ mb: 4 }}>
           <Paper sx={{ p: 2, mb: 2, bgcolor: '#f8f8f8' }}>
@@ -929,34 +929,67 @@ const renderGeneratedQuiz = () => {
             </Box>
           </Paper>
           
-          {groupedQuestions.multiple.map((question) => (
-            <Card key={question.id} sx={{ mb: 3, boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }}>
-              <CardContent>
-                <Typography variant="body1" gutterBottom sx={{ fontWeight: 'medium' }}>
-                  {questionCounter++}. {question.text}
-                </Typography>
-
-                <List dense>
-                  {question.options.map((option, optIndex) => (
-                    <ListItem key={optIndex}>
-                      <Radio disabled />
-                      <ListItemText primary={option} />
-                    </ListItem>
-                  ))}
-                </List>
-
-                {showTopicNames && (
-                  <Typography variant="caption" color="text.secondary">
-                    {question.chapterName} > {question.topicName}
+          {groupedQuestions.multiple.map((question) => {
+            const isRtl = isUrduText(question.text);
+            return (
+              <Card key={question.id} sx={{ mb: 3, boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }}>
+                <CardContent>
+                  <Typography 
+                    variant="body1" 
+                    gutterBottom 
+                    sx={{ 
+                      fontWeight: 'medium',
+                      direction: isRtl ? 'rtl' : 'ltr',
+                      textAlign: isRtl ? 'right' : 'left',
+                      fontFamily: isRtl ? 'Noto Nastaliq Urdu, Arial' : 'inherit',
+                      fontSize: isRtl ? '1.1rem' : 'inherit'
+                    }}
+                  >
+                    {questionCounter++}. {question.text}
                   </Typography>
-                )}
-              </CardContent>
-            </Card>
-          ))}
+
+                  <List dense sx={{ 
+                    direction: isRtl ? 'rtl' : 'ltr',
+                    textAlign: isRtl ? 'right' : 'left' 
+                  }}>
+                    {question.options.map((option, optIndex) => (
+                      <ListItem key={optIndex}>
+                        <Radio disabled />
+                        <ListItemText 
+                          primary={option} 
+                          sx={{ 
+                            '& .MuiTypography-root': {
+                              fontFamily: isRtl ? 'Noto Nastaliq Urdu, Arial' : 'inherit',
+                              fontSize: isRtl ? '1.1rem' : 'inherit',
+                              textAlign: isRtl ? 'right' : 'left'
+                            } 
+                          }}
+                        />
+                      </ListItem>
+                    ))}
+                  </List>
+
+                  {showTopicNames && (
+                    <Typography 
+                      variant="caption" 
+                      color="text.secondary"
+                      sx={{ 
+                        display: 'block',
+                        direction: isRtl ? 'rtl' : 'ltr',
+                        textAlign: isRtl ? 'right' : 'left'
+                      }}
+                    >
+                      {question.chapterName} > {question.topicName}
+                    </Typography>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
         </Box>
       )}
 
-      {/* True/False Questions Section */}
+      {/* True/False Questions Section with RTL support */}
       {groupedQuestions.truefalse.length > 0 && (
         <Box sx={{ mb: 4 }}>
           <Paper sx={{ p: 2, mb: 2, bgcolor: '#f8f8f8' }}>
@@ -970,31 +1003,62 @@ const renderGeneratedQuiz = () => {
             </Box>
           </Paper>
           
-          {groupedQuestions.truefalse.map((question) => (
-            <Card key={question.id} sx={{ mb: 3, boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }}>
-              <CardContent>
-                <Typography variant="body1" gutterBottom sx={{ fontWeight: 'medium' }}>
-                  {questionCounter++}. {question.text}
-                </Typography>
-
-                <Box sx={{ ml: 3 }}>
-                  <Typography variant="body2">
-                    True _____ False _____
+          {groupedQuestions.truefalse.map((question) => {
+            const isRtl = isUrduText(question.text);
+            return (
+              <Card key={question.id} sx={{ mb: 3, boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }}>
+                <CardContent>
+                  <Typography 
+                    variant="body1" 
+                    gutterBottom 
+                    sx={{ 
+                      fontWeight: 'medium',
+                      direction: isRtl ? 'rtl' : 'ltr',
+                      textAlign: isRtl ? 'right' : 'left',
+                      fontFamily: isRtl ? 'Noto Nastaliq Urdu, Arial' : 'inherit',
+                      fontSize: isRtl ? '1.1rem' : 'inherit'
+                    }}
+                  >
+                    {questionCounter++}. {question.text}
                   </Typography>
-                </Box>
 
-                {showTopicNames && (
-                  <Typography variant="caption" color="text.secondary">
-                    {question.chapterName} > {question.topicName}
-                  </Typography>
-                )}
-              </CardContent>
-            </Card>
-          ))}
+                  <Box sx={{ 
+                    ml: isRtl ? 0 : 3, 
+                    mr: isRtl ? 3 : 0,
+                    direction: isRtl ? 'rtl' : 'ltr',
+                    textAlign: isRtl ? 'right' : 'left',
+                  }}>
+                    <Typography 
+                      variant="body2"
+                      sx={{
+                        fontFamily: isRtl ? 'Noto Nastaliq Urdu, Arial' : 'inherit',
+                      }}
+                    >
+                      {isRtl ? "صحیح _____ غلط _____" : "True _____ False _____"}
+                    </Typography>
+                  </Box>
+
+                  {showTopicNames && (
+                    <Typography 
+                      variant="caption" 
+                      color="text.secondary"
+                      sx={{ 
+                        display: 'block',
+                        direction: isRtl ? 'rtl' : 'ltr',
+                        textAlign: isRtl ? 'right' : 'left'
+                      }}
+                    >
+                      {question.chapterName} > {question.topicName}
+                    </Typography>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
         </Box>
       )}
 
-      {/* Fill in the Blanks Section */}
+      {/* Fill in the Blanks Section with RTL support */}
       {groupedQuestions.fillinblanks.length > 0 && (
         <Box sx={{ mb: 4 }}>
           <Paper sx={{ p: 2, mb: 2, bgcolor: '#f8f8f8' }}>
@@ -1024,7 +1088,6 @@ const renderGeneratedQuiz = () => {
             </Box>
           </Paper>
           
-          {/* Create a Set to track rendered question IDs */}
           {(() => {
             const renderedIds = new Set();
             return groupedQuestions.fillinblanks.map((question) => {
@@ -1033,15 +1096,35 @@ const renderGeneratedQuiz = () => {
               // Add to rendered IDs
               renderedIds.add(question.id);
               
+              const isRtl = isUrduText(question.text);
+              
               return (
                 <Card key={question.id} sx={{ mb: 3, boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }}>
                   <CardContent>
-                    <Typography variant="body1" gutterBottom sx={{ fontWeight: 'medium' }}>
+                    <Typography 
+                      variant="body1" 
+                      gutterBottom 
+                      sx={{ 
+                        fontWeight: 'medium',
+                        direction: isRtl ? 'rtl' : 'ltr',
+                        textAlign: isRtl ? 'right' : 'left',
+                        fontFamily: isRtl ? 'Noto Nastaliq Urdu, Arial' : 'inherit',
+                        fontSize: isRtl ? '1.1rem' : 'inherit'
+                      }}
+                    >
                       {questionCounter++}. {question.text}
                     </Typography>
 
                     {showTopicNames && (
-                      <Typography variant="caption" color="text.secondary">
+                      <Typography 
+                        variant="caption" 
+                        color="text.secondary"
+                        sx={{ 
+                          display: 'block',
+                          direction: isRtl ? 'rtl' : 'ltr',
+                          textAlign: isRtl ? 'right' : 'left'
+                        }}
+                      >
                         {question.chapterName} > {question.topicName}
                       </Typography>
                     )}
@@ -1053,7 +1136,7 @@ const renderGeneratedQuiz = () => {
         </Box>
       )}
 
-      {/* Short Answer Questions Section */}
+      {/* Short Answer Questions Section with RTL support */}
       {groupedQuestions.shortAnswer.length > 0 && (
         <Box sx={{ mb: 4 }}>
           <Paper sx={{ p: 2, mb: 2, bgcolor: '#f8f8f8' }}>
@@ -1067,27 +1150,58 @@ const renderGeneratedQuiz = () => {
             </Box>
           </Paper>
           
-          {groupedQuestions.shortAnswer.map((question) => (
-            <Card key={question.id} sx={{ mb: 3, boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }}>
-              <CardContent>
-                <Typography variant="body1" gutterBottom sx={{ fontWeight: 'medium' }}>
-                  {questionCounter++}. {question.text}
-                </Typography>
-
-                <Box sx={{ mt: 2, mb: 1 }}>
-                  <Typography variant="body2">
-                    ___________________________________________________________
+          {groupedQuestions.shortAnswer.map((question) => {
+            const isRtl = isUrduText(question.text);
+            return (
+              <Card key={question.id} sx={{ mb: 3, boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }}>
+                <CardContent>
+                  <Typography 
+                    variant="body1" 
+                    gutterBottom 
+                    sx={{ 
+                      fontWeight: 'medium',
+                      direction: isRtl ? 'rtl' : 'ltr',
+                      textAlign: isRtl ? 'right' : 'left',
+                      fontFamily: isRtl ? 'Noto Nastaliq Urdu, Arial' : 'inherit',
+                      fontSize: isRtl ? '1.1rem' : 'inherit'
+                    }}
+                  >
+                    {questionCounter++}. {question.text}
                   </Typography>
-                </Box>
 
-                {showTopicNames && (
-                  <Typography variant="caption" color="text.secondary">
-                    {question.chapterName} > {question.topicName}
-                  </Typography>
-                )}
-              </CardContent>
-            </Card>
-          ))}
+                  <Box sx={{ 
+                    mt: 2, 
+                    mb: 1, 
+                    direction: isRtl ? 'rtl' : 'ltr', 
+                    textAlign: isRtl ? 'right' : 'left' 
+                  }}>
+                    <Typography 
+                      variant="body2"
+                      sx={{
+                        fontFamily: isRtl ? 'Noto Nastaliq Urdu, Arial' : 'inherit'
+                      }}
+                    >
+                      ___________________________________________________________
+                    </Typography>
+                  </Box>
+
+                  {showTopicNames && (
+                    <Typography 
+                      variant="caption" 
+                      color="text.secondary"
+                      sx={{ 
+                        display: 'block',
+                        direction: isRtl ? 'rtl' : 'ltr',
+                        textAlign: isRtl ? 'right' : 'left'
+                      }}
+                    >
+                      {question.chapterName} > {question.topicName}
+                    </Typography>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
         </Box>
       )}
 
@@ -1121,27 +1235,32 @@ const renderGeneratedQuiz = () => {
             </Box>
           </Paper>
           
-          {groupedQuestions.scrambled.map((question) => (
-            <Card key={question.id} sx={{ mb: 3, boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }}>
-              <CardContent>
-                <Typography variant="body1" gutterBottom sx={{ fontWeight: 'medium' }}>
-                  {questionCounter++}. {question.text}
-                </Typography>
+          {/* Create a Set to track rendered question IDs */}
+          {(() => {
+            const renderedIds = new Set();
+            return groupedQuestions.scrambled.map((question) => {
+              // Skip if already rendered
+              if (renderedIds.has(question.id)) return null;
+              // Add to rendered IDs
+              renderedIds.add(question.id);
+              
+              return (
+                <Card key={question.id} sx={{ mb: 3, boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }}>
+                  <CardContent>
+                    <Typography variant="body1" gutterBottom sx={{ fontWeight: 'medium' }}>
+                      {questionCounter++}. {question.text}
+                    </Typography>
 
-                <Box sx={{ mt: 2, mb: 1 }}>
-                  <Typography variant="body2">
-                    ___________________________________________________________
-                  </Typography>
-                </Box>
-
-                {showTopicNames && (
-                  <Typography variant="caption" color="text.secondary">
-                    {question.chapterName} > {question.topicName}
-                  </Typography>
-                )}
-              </CardContent>
-            </Card>
-          ))}
+                    {showTopicNames && (
+                      <Typography variant="caption" color="text.secondary">
+                        {question.chapterName} > {question.topicName}
+                      </Typography>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            }).filter(Boolean); // Filter out null values from skipped duplicates
+          })()}
         </Box>
       )}
 
@@ -1963,6 +2082,25 @@ return (
     </Box>
   </Container>
 );
+};
+
+// Utility function to detect if text contains Urdu
+const isUrduText = (text) => {
+  if (!text) return false;
+  
+  // Urdu Unicode range (approximate)
+  const urduPattern = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
+  
+  // Count characters that match Urdu pattern
+  let urduCharCount = 0;
+  for (let i = 0; i < text.length; i++) {
+    if (urduPattern.test(text[i])) {
+      urduCharCount++;
+    }
+  }
+  
+  // If more than 30% of characters are Urdu, consider it Urdu text
+  return urduCharCount / text.length > 0.3;
 };
 
 export default GenerateQuiz;

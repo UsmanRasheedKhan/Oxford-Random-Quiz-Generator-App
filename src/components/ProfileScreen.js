@@ -87,9 +87,10 @@ const ProfileScreen = () => {
 
         const email = currentUser.email;
         const role = localStorage.getItem("role");
+        console.log("Role: ", role)
 
         const userQuery = query(
-          collection(db, `users/usersData/${role === "Admin" ? "admins" : "teachers"}`),
+          collection(db, `users/usersData/${role === "admin" ? "admins" : role === "school-admin" ? "school-admin" : "teachers"}`),
           where("email", "==", email)
         );
         const querySnapshot = await getDocs(userQuery);
@@ -163,7 +164,7 @@ const ProfileScreen = () => {
       const email = currentUser.email;
 
       const userQuery = query(
-        collection(db, `users/usersData/${role === "Admin" ? "admins" : "teachers"}`),
+        collection(db, `users/usersData/${role === "Admin" ? "admins" : role === "school-admin" ? "school-admin" : "teachers"}`),
         where("email", "==", email)
       );
       const querySnapshot = await getDocs(userQuery);
@@ -271,8 +272,10 @@ const ProfileScreen = () => {
 
   const navigateToDashboard = () => {
     const role = localStorage.getItem("role");
-    if (role === "Admin") {
+    if (role === "admin") {
       navigate('/admin');
+    } else if(role === 'school-admin'){
+      navigate('/school-admin')
     } else {
       navigate('/teacher');
     }
@@ -294,7 +297,7 @@ const ProfileScreen = () => {
         </Alert>
         <Button 
           variant="contained"
-          href="/login"
+          href="/"
           sx={{
             bgcolor: "#011E41",
             '&:hover': { bgcolor: "#032c5a" }

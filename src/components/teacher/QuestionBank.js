@@ -37,7 +37,8 @@ import {
   Grid,
   Chip,
   Checkbox,
-  FormHelperText
+  FormHelperText,
+  InputAdornment
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import { 
@@ -49,7 +50,8 @@ import {
   LibraryBooks as ChapterIcon,
   Topic as TopicIcon,
   QuestionAnswer as QuestionIcon,
-  School as SchoolIcon
+  School as SchoolIcon,
+  Close as CloseIcon
 } from "@mui/icons-material";
 import { collection, query, where, getDocs, doc, getDoc, updateDoc, deleteDoc, addDoc, writeBatch } from "firebase/firestore";
 import { db, auth } from "../../firebase"; // Adjust path as needed
@@ -83,7 +85,8 @@ const QuestionBank = () => {
     options: ["", "", "", ""],
     correctOption: 0,
     shortAnswer: "",
-    isTrueAnswer: true  // New field for true/false questions
+    isTrueAnswer: true,  // New field for true/false questions
+    difficulty: "Medium" // Add default difficulty
   });
   const [isNewQuestion, setIsNewQuestion] = useState(false);
 
@@ -298,6 +301,25 @@ const renderCustomInstructionsEditor = () => (
     </Grid>
   </Paper>
 );
+
+// Utility function to detect if text contains Urdu
+const isUrduText = (text) => {
+  if (!text) return false;
+  
+  // Urdu Unicode range (approximate)
+  const urduPattern = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
+  
+  // Count characters that match Urdu pattern
+  let urduCharCount = 0;
+  for (let i = 0; i < text.length; i++) {
+    if (urduPattern.test(text[i])) {
+      urduCharCount++;
+    }
+  }
+  
+  // If more than 30% of characters are Urdu, consider it Urdu text
+  return urduCharCount / text.length > 0.3;
+};
 
   // Load user and their departments
   useEffect(() => {
@@ -652,7 +674,8 @@ const loadBookStructure = async (bookId) => {
       shortAnswer: question.shortAnswer || "",
       blankAnswer: question.blankAnswer || "",
       instructionType: question.instructionType || "shortAnswer", // Add instruction type
-      isTrueAnswer: question.isTrueAnswer || true
+      isTrueAnswer: question.isTrueAnswer || true,
+      difficulty: question.difficulty || "Medium" // Include difficulty from existing question or default
     });
     setIsNewQuestion(false);
     setQuestionDialog(true);
@@ -672,7 +695,8 @@ const loadBookStructure = async (bookId) => {
       shortAnswer: "",
       blankAnswer: "",
       instructionType: "shortAnswer", // Add default instruction type
-      isTrueAnswer: true
+      isTrueAnswer: true,
+      difficulty: "Medium" // Add default difficulty
     });
     setIsNewQuestion(true);
     setQuestionDialog(true);
@@ -740,10 +764,11 @@ const saveQuestion = async () => {
     const { chapterId, topicId } = editingQuestion;
     const formattedGrade = selectedGrade.replace(" ", "_");
     
-    // Prepare question data with author name and pending status
+    // Prepare question data with author name, pending status, and difficulty
     const questionData = {
       text: newQuestion.text.trim(),
       type: newQuestion.type,
+      difficulty: newQuestion.difficulty, // Include difficulty in saved data
       ...(newQuestion.type === "multiple" ? {
         options: newQuestion.options.map(opt => opt.trim()),
         correctOption: newQuestion.correctOption
@@ -1096,6 +1121,44 @@ const saveBulkQuestions = async () => {
   // Handle closing the toast
   const handleCloseToast = () => {
     setToast({ ...toast, open: false });
+  };
+
+  // Add formula keyboard state
+  const [formulaKeyboardOpen, setFormulaKeyboardOpen] = useState(false);
+  const [formulaInsertPosition, setFormulaInsertPosition] = useState(0);
+
+  // Math symbols for formula keyboard
+  const mathSymbols = [
+    '±', '×', '÷', '≠', '≈', '≤', '≥', '∞', '∑', '∏', 
+    '∫', '∂', '√', '∛', 'π', 'θ', 'Δ', 'α', 'β', 'γ',
+    'μ', 'φ', 'Ω', 'λ', 'ε', '∈', '∉', '∩', '∪', '⊂',
+    '⊃', '⊆', '⊇', '∀', '∃', '∄', '⇒', '⇔', '∧', '∨'
+  ];
+
+  // Function to insert formula symbol at cursor position
+  const insertFormulaSymbol = (symbol) => {
+    const textBefore = newQuestion.text.substring(0, formulaInsertPosition);
+    const textAfter = newQuestion.text.substring(formulaInsertPosition);
+    
+    setNewQuestion({
+      ...newQuestion,
+      text: textBefore + symbol + textAfter
+    });
+    
+    // Update cursor position
+    setFormulaInsertPosition(formulaInsertPosition + symbol.length);
+  };
+
+  // Track cursor position in the text field
+  const handleQuestionTextChange = (e) => {
+    const cursorPosition = e.target.selectionStart;
+    setNewQuestion({...newQuestion, text: e.target.value});
+    setFormulaInsertPosition(cursorPosition);
+  };
+
+  // Toggle formula keyboard
+  const toggleFormulaKeyboard = () => {
+    setFormulaKeyboardOpen(!formulaKeyboardOpen);
   };
 
   return (
@@ -1515,15 +1578,113 @@ const saveBulkQuestions = async () => {
           )}
           
           <Box sx={{ mt: 1 }}>
-            <TextField
-              fullWidth
-              multiline
-              rows={2}
-              label="Question Text"
-              value={newQuestion.text}
-              onChange={(e) => setNewQuestion({...newQuestion, text: e.target.value})}
-              sx={{ mb: 3 }}
-            />
+            {/* Question text box with RTL support for Urdu */}
+            <Box sx={{ position: 'relative', mb: 3 }}>
+              <TextField
+                fullWidth
+                multiline
+                rows={3}
+                label="Question Text"
+                value={newQuestion.text}
+                onChange={handleQuestionTextChange}
+                onSelect={(e) => {
+                  setFormulaInsertPosition(e.target.selectionStart);
+                }}
+                InputProps={{
+                  endAdornment: (
+                    !isUrduText(newQuestion.text) ? (
+                      <InputAdornment position="end">
+                        <Button 
+                          variant="outlined" 
+                          size="small"
+                          onClick={toggleFormulaKeyboard}
+                          sx={{ 
+                            fontFamily: 'math', 
+                            fontWeight: 'bold', 
+                            fontSize: '15px',
+                            minWidth: 'auto',
+                            borderRadius: '4px'
+                          }}
+                        >
+                          ƒ<sub>x</sub>
+                        </Button>
+                      </InputAdornment>
+                    ) : null
+                  ),
+                  style: isUrduText(newQuestion.text) ? { 
+                    direction: 'rtl', 
+                    textAlign: 'right', 
+                    fontFamily: 'Noto Nastaliq Urdu, Arial'
+                  } : {}
+                }}
+                InputLabelProps={{
+                  style: isUrduText(newQuestion.text) ? { 
+                    left: 'auto', 
+                    right: 32, 
+                    transformOrigin: 'top right',
+                    background: 'white',
+                    padding: '0 8px'
+                  } : {}
+                }}
+                sx={isUrduText(newQuestion.text) ? { 
+                  '& .MuiInputBase-input': { textAlign: 'right' },
+                  '& .MuiOutlinedInput-notchedOutline': { 
+                    textAlign: 'right'
+                  },
+                  '& .MuiInputLabel-outlined': {
+                    transform: 'translate(-14px, -9px) scale(0.75)'
+                  },
+                  '& .MuiInputLabel-shrink': {
+                    transform: 'translate(-14px, -9px) scale(0.75)'
+                  }
+                } : {}}
+              />
+              
+              {formulaKeyboardOpen && !isUrduText(newQuestion.text) && (
+                <Paper 
+                  elevation={3} 
+                  sx={{ 
+                    position: 'absolute', 
+                    top: '100%', 
+                    left: 0, 
+                    right: 0, 
+                    zIndex: 1000,
+                    p: 2,
+                    mt: 1,
+                    maxHeight: '200px',
+                    overflowY: 'auto'
+                  }}
+                >
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                    <Typography variant="subtitle2">Insert Math Symbol</Typography>
+                    <IconButton size="small" onClick={toggleFormulaKeyboard}>
+                      <CloseIcon fontSize="small" />
+                    </IconButton>
+                  </Box>
+                  
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                    {mathSymbols.map((symbol) => (
+                      <Button 
+                        key={symbol}
+                        variant="outlined"
+                        size="small"
+                        onClick={() => {
+                          insertFormulaSymbol(symbol);
+                        }}
+                        sx={{ 
+                          minWidth: '36px', 
+                          height: '36px',
+                          fontFamily: 'math',
+                          p: 0
+                        }}
+                      >
+                        {symbol}
+                      </Button>
+                    ))}
+                  </Box>
+                </Paper>
+              )}
+            </Box>
             
             <FormControl component="fieldset" sx={{ mb: 3 }}>
               <Typography variant="subtitle1">Question Type</Typography>
@@ -1554,75 +1715,166 @@ const saveBulkQuestions = async () => {
                 />
               </RadioGroup>
             </FormControl>
+
+            <FormControl fullWidth sx={{ mb: 3, mt: 2 }}>
+              <InputLabel>Difficulty Level</InputLabel>
+              <Select
+                value={newQuestion.difficulty || "Medium"}
+                onChange={(e) => setNewQuestion({...newQuestion, difficulty: e.target.value})}
+                label="Difficulty Level"
+              >
+                <MenuItem value="Easy" sx={{ color: 'success.main' }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: 'success.main', mr: 1 }} />
+                    Easy
+                  </Box>
+                </MenuItem>
+                <MenuItem value="Medium" sx={{ color: 'warning.main' }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: 'warning.main', mr: 1 }} />
+                    Medium
+                  </Box>
+                </MenuItem>
+                <MenuItem value="Hard" sx={{ color: 'error.main' }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: 'error.main', mr: 1 }} />
+                    Hard
+                  </Box>
+                </MenuItem>
+              </Select>
+              <FormHelperText>Select the difficulty level of this question</FormHelperText>
+            </FormControl>
             
+            {/* Multiple choice options with RTL support */}
             {newQuestion.type === "multiple" && (
               <Box>
                 <Typography variant="subtitle1" sx={{ mb: 1 }}>Options</Typography>
                 <Grid container spacing={2}>
-                  {newQuestion.options.map((option, index) => (
-                    <Grid item xs={12} sm={6} key={index} container alignItems="center" spacing={1}>
-                      <Grid item>
-                        <Radio 
-                          checked={newQuestion.correctOption === index}
-                          onChange={() => setNewQuestion({...newQuestion, correctOption: index})}
-                        />
+                  {newQuestion.options.map((option, index) => {
+                    const isOptionUrdu = isUrduText(option);
+                    return (
+                      <Grid item xs={12} sm={6} key={index} container alignItems="center" spacing={1}>
+                        <Grid item>
+                          <Radio 
+                            checked={newQuestion.correctOption === index}
+                            onChange={() => setNewQuestion({...newQuestion, correctOption: index})}
+                          />
+                        </Grid>
+                        <Grid item xs>
+                          <TextField
+                            fullWidth
+                            label={`Option ${index + 1}`}
+                            value={option}
+                            onChange={(e) => handleOptionChange(index, e.target.value)}
+                            InputProps={{
+                              style: isOptionUrdu ? { 
+                                direction: 'rtl', 
+                                textAlign: 'right', 
+                                fontFamily: 'Noto Nastaliq Urdu, Arial' 
+                              } : {}
+                            }}
+                            InputLabelProps={{
+                              style: isOptionUrdu ? { 
+                                left: 'auto', 
+                                right: 32, 
+                                transformOrigin: 'top right',
+                                background: 'white',
+                                padding: '0 8px'
+                              } : {}
+                            }}
+                            sx={isOptionUrdu ? { 
+                              '& .MuiInputBase-input': { textAlign: 'right' },
+                              '& .MuiOutlinedInput-notchedOutline': { 
+                                textAlign: 'right'
+                              },
+                              '& .MuiInputLabel-outlined': {
+                                transform: 'translate(-14px, -9px) scale(0.75)'
+                              },
+                              '& .MuiInputLabel-shrink': {
+                                transform: 'translate(-14px, -9px) scale(0.75)'
+                              }
+                            } : {}}
+                          />
+                        </Grid>
                       </Grid>
-                      <Grid item xs>
-                        <TextField
-                          fullWidth
-                          label={`Option ${index + 1}`}
-                          value={option}
-                          onChange={(e) => handleOptionChange(index, e.target.value)}
-                        />
-                      </Grid>
-                    </Grid>
-                  ))}
+                    );
+                  })}
                 </Grid>
               </Box>
             )}
             
-            {newQuestion.type === "short" && (
-              <>
-                <FormControl fullWidth sx={{ mb: 2 }}>
-                  <InputLabel>Question Subtype</InputLabel>
-                  <Select
-                    value={newQuestion.instructionType}
-                    onChange={(e) => setNewQuestion({...newQuestion, instructionType: e.target.value})}
-                    label="Question Subtype"
-                  >
-                    <MenuItem value="shortAnswer">Short Answer</MenuItem>
-                    <MenuItem value="oneWord">One Word Answer</MenuItem>
-                    <MenuItem value="describe">Description</MenuItem>
-                    <MenuItem value="jumbled">Jumbled Sentences</MenuItem>
-                    <MenuItem value="punctuation">Punctuation & Capitalization</MenuItem>
-                    <MenuItem value="scrambled">Scrambled Words</MenuItem>
-                    <MenuItem value="other">Other</MenuItem>
-                    {/* Include any additional custom types */}
-                    {customInstructionTypes.map(type => {
-                      // Skip types already in default list
-                      if (!["shortAnswer", "oneWord", "describe", "jumbled", 
-                          "punctuation", "scrambled", "other"].includes(type)) {
-                        return (
-                          <MenuItem key={type} value={type}>{type}</MenuItem>
-                        );
-                      }
-                      return null;
-                    }).filter(Boolean)}
-                  </Select>
-                  <FormHelperText>
-                    {shortAnswerInstructions[newQuestion.instructionType] || "Select question subtype"}
-                  </FormHelperText>
-                </FormControl>
+            {/* Short answer with improved RTL support */}
+{newQuestion.type === "short" && (
+  <>
+    <FormControl fullWidth sx={{ mb: 2 }}>
+      <InputLabel>Question Subtype</InputLabel>
+      <Select
+        value={newQuestion.instructionType}
+        onChange={(e) => setNewQuestion({...newQuestion, instructionType: e.target.value})}
+        label="Question Subtype"
+      >
+        <MenuItem value="shortAnswer">Short Answer</MenuItem>
+        <MenuItem value="oneWord">One Word Answer</MenuItem>
+        <MenuItem value="describe">Description</MenuItem>
+        <MenuItem value="jumbled">Jumbled Sentences</MenuItem>
+        <MenuItem value="punctuation">Punctuation & Capitalization</MenuItem>
+        <MenuItem value="scrambled">Scrambled Words</MenuItem>
+        <MenuItem value="other">Other</MenuItem>
+        {/* Include any additional custom types */}
+        {customInstructionTypes.map(type => {
+          // Skip types already in default list
+          if (!["shortAnswer", "oneWord", "describe", "jumbled", 
+              "punctuation", "scrambled", "other"].includes(type)) {
+            return (
+              <MenuItem key={type} value={type}>{type}</MenuItem>
+            );
+          }
+          return null;
+        }).filter(Boolean)}
+      </Select>
+      <FormHelperText>
+        {shortAnswerInstructions[newQuestion.instructionType] || "Select question subtype"}
+      </FormHelperText>
+    </FormControl>
 
-                <TextField
-                  fullWidth
-                  label="Correct Answer"
-                  value={newQuestion.shortAnswer}
-                  onChange={(e) => setNewQuestion({...newQuestion, shortAnswer: e.target.value})}
-                />
-              </>
-            )}
-
+    <TextField
+      fullWidth
+      label="Correct Answer"
+      value={newQuestion.shortAnswer}
+      onChange={(e) => setNewQuestion({...newQuestion, shortAnswer: e.target.value})}
+      InputProps={{
+        style: isUrduText(newQuestion.shortAnswer) ? { 
+          direction: 'rtl', 
+          textAlign: 'right', 
+          fontFamily: 'Noto Nastaliq Urdu, Arial'
+        } : {}
+      }}
+      InputLabelProps={{
+        style: isUrduText(newQuestion.shortAnswer) ? { 
+          left: 'auto', 
+          right: 32, 
+          transformOrigin: 'top right',
+          background: 'white',
+          padding: '0 8px'
+        } : {}
+      }}
+      sx={isUrduText(newQuestion.shortAnswer) ? { 
+        '& .MuiInputBase-input': { textAlign: 'right' },
+        '& .MuiOutlinedInput-notchedOutline': { 
+          textAlign: 'right'
+        },
+        '& .MuiInputLabel-outlined': {
+          transform: 'translate(-14px, -9px) scale(0.75)'
+        },
+        '& .MuiInputLabel-shrink': {
+          transform: 'translate(-14px, -9px) scale(0.75)'
+        }
+      } : {}}
+    />
+  </>
+)}
+            
+            {/* Fill in the blanks with RTL support */}
             {newQuestion.type === "fillinblanks" && (
               <TextField
                 fullWidth
@@ -1630,9 +1882,38 @@ const saveBulkQuestions = async () => {
                 value={newQuestion.blankAnswer}
                 onChange={(e) => setNewQuestion({...newQuestion, blankAnswer: e.target.value})}
                 helperText="Enter the word or phrase that should fill in the blank"
+                InputProps={{
+                  style: isUrduText(newQuestion.blankAnswer) ? { 
+                    direction: 'rtl', 
+                    textAlign: 'right', 
+                    fontFamily: 'Noto Nastaliq Urdu, Arial' 
+                  } : {}
+                }}
+                InputLabelProps={{
+                  style: isUrduText(newQuestion.blankAnswer) ? { 
+                    left: 'auto', 
+                    right: 32, 
+                    transformOrigin: 'top right',
+                    background: 'white',
+                    padding: '0 8px'
+                  } : {}
+                }}
+                sx={isUrduText(newQuestion.blankAnswer) ? { 
+                  '& .MuiInputBase-input': { textAlign: 'right' },
+                  '& .MuiOutlinedInput-notchedOutline': { 
+                    textAlign: 'right'
+                  },
+                  '& .MuiInputLabel-outlined': {
+                    transform: 'translate(-14px, -9px) scale(0.75)'
+                  },
+                  '& .MuiInputLabel-shrink': {
+                    transform: 'translate(-14px, -9px) scale(0.75)'
+                  }
+                } : {}}
               />
             )}
 
+            {/* True/False with RTL support and Arabic/Urdu translations */}
             {newQuestion.type === "truefalse" && (
               <FormControl component="fieldset" sx={{ mb: 3 }}>
                 <Typography variant="subtitle1">Correct Answer</Typography>
@@ -1640,16 +1921,29 @@ const saveBulkQuestions = async () => {
                   row
                   value={newQuestion.isTrueAnswer}
                   onChange={(e) => setNewQuestion({...newQuestion, isTrueAnswer: e.target.value === "true"})}
+                  sx={isUrduText(newQuestion.text) ? { flexDirection: 'row-reverse' } : {}}
                 >
                   <FormControlLabel 
                     value={true} 
                     control={<Radio />} 
-                    label="True" 
+                    label={isUrduText(newQuestion.text) ? "صحیح" : "True"}
+                    sx={isUrduText(newQuestion.text) ? { 
+                      '& .MuiFormControlLabel-label': { 
+                        fontFamily: 'Noto Nastaliq Urdu, Arial',
+                        fontSize: '1.1rem'  
+                      } 
+                    } : {}}
                   />
                   <FormControlLabel 
                     value={false} 
                     control={<Radio />} 
-                    label="False" 
+                    label={isUrduText(newQuestion.text) ? "غلط" : "False"}
+                    sx={isUrduText(newQuestion.text) ? { 
+                      '& .MuiFormControlLabel-label': { 
+                        fontFamily: 'Noto Nastaliq Urdu, Arial',
+                        fontSize: '1.1rem'  
+                      } 
+                    } : {}}
                   />
                 </RadioGroup>
               </FormControl>

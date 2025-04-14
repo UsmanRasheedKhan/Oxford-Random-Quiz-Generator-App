@@ -30,6 +30,25 @@ import { auth } from "../../firebase";
 // Import the Oxford logo
 import oxfordLogo from "../../assets/oxford-logo.png";
 
+// Utility function to detect if text contains Urdu
+const isUrduText = (text) => {
+  if (!text) return false;
+  
+  // Urdu Unicode range (approximate)
+  const urduPattern = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
+  
+  // Count characters that match Urdu pattern
+  let urduCharCount = 0;
+  for (let i = 0; i < text.length; i++) {
+    if (urduPattern.test(text[i])) {
+      urduCharCount++;
+    }
+  }
+  
+  // If more than 30% of characters are Urdu, consider it Urdu text
+  return urduCharCount / text.length > 0.3;
+};
+
 // Custom styled Paper component for tiles
 const FeatureTile = styled(Paper)(({ theme }) => ({
   padding: theme.spacing(3),

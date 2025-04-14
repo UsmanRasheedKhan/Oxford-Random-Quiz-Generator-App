@@ -43,11 +43,79 @@ import {
   ArrowBack as BackIcon,
   PersonAdd as PersonAddIcon,
   Save as SaveIcon,
+  School as SchoolIcon,
 } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
 import { getAuth } from "firebase/auth";
 import { initializeApp } from "firebase/app";
 import { firebaseConfig } from "../../firebase"; // Make sure this path is correct
+
+// Utility function to detect if text contains Urdu
+const isUrduText = (text) => {
+  if (!text) return false;
+  
+  // Urdu Unicode range (approximate)
+  const urduPattern = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
+  
+  // Count characters that match Urdu pattern
+  let urduCharCount = 0;
+  for (let i = 0; i < text.length; i++) {
+    if (urduPattern.test(text[i])) {
+      urduCharCount++;
+    }
+  }
+  
+  // If more than 30% of characters are Urdu, consider it Urdu text
+  return urduCharCount / text.length > 0.3;
+};
+
+// Update the TextField with RTL support
+const renderRTLTextField = (name, label, value, onChange, required = false, icon = null, type = "text", multiline = false, rows = 1, helperText = null) => {
+  const isRtl = isUrduText(value);
+  
+  return (
+    <TextField
+      name={name}
+      label={label}
+      type={type}
+      value={value}
+      onChange={onChange}
+      required={required}
+      fullWidth
+      variant="outlined"
+      multiline={multiline}
+      rows={rows}
+      helperText={helperText}
+      InputProps={{
+        startAdornment: icon ? (
+          <InputAdornment position="start">
+            {icon}
+          </InputAdornment>
+        ) : null,
+        style: {
+          direction: isRtl ? 'rtl' : 'ltr',
+          textAlign: isRtl ? 'right' : 'left',
+          fontFamily: isRtl ? 'Noto Nastaliq Urdu, Arial' : 'inherit'
+        }
+      }}
+      InputLabelProps={{
+        style: isRtl ? {
+          right: 32,
+          left: 'auto',
+          transformOrigin: 'right top',
+          fontFamily: 'Noto Nastaliq Urdu, Arial'
+        } : {}
+      }}
+      sx={{
+        '& .MuiOutlinedInput-root': {
+          '& fieldset': {
+            borderColor: isRtl ? '#1976d2' : 'rgba(0, 0, 0, 0.23)',
+          },
+        }
+      }}
+    />
+  );
+};
 
 const CreateUser = () => {
   const secondaryApp = initializeApp(firebaseConfig, "SecondaryApp");
@@ -61,6 +129,9 @@ const CreateUser = () => {
     subjects: [],
     grades: [],
     department: [],
+    // Add School Admin fields
+    schoolName: "",
+    schoolCode: "",
   });
 
   const [subjects, setSubjects] = useState([]);
@@ -237,6 +308,17 @@ const CreateUser = () => {
       return;
     }
     
+    // Validate School Admin fields
+    if (formData.role === "School Admin" && 
+        (!formData.schoolName.trim() || !formData.schoolCode.trim())) {
+      setNotification({
+        open: true,
+        message: "School Name and School Code are required for School Admin",
+        severity: "error"
+      });
+      return;
+    }
+    
     setLoading(true);
     try {
       // Use secondaryAuth instead of auth for creating users
@@ -249,7 +331,15 @@ const CreateUser = () => {
       // Sign out from secondary app immediately to prevent any session issues
       await secondaryAuth.signOut();
 
-      const collectionName = formData.role === "Admin" ? "admins" : "teachers";
+      // Determine collection name based on role
+      let collectionName;
+      if (formData.role === "Admin") {
+        collectionName = "admins";
+      } else if (formData.role === "School Admin") {
+        collectionName = "school-admin";
+      } else {
+        collectionName = "teachers";
+      }
 
       const userData = {
         name: formData.name,
@@ -263,15 +353,18 @@ const CreateUser = () => {
         userData.department = formData.department;
         userData.grades = formData.grades;
         userData.subjects = formData.subjects;
+      } else if (formData.role === "School Admin") {
+        userData.schoolName = formData.schoolName;
+        userData.schoolCode = formData.schoolCode;
       }
 
       // Add user to the role-specific collection
       await addDoc(collection(db, `users/usersData/${collectionName}`), userData);
       
-      // ADD THIS CODE: Create login entry with role information
+      // Create login entry with role information - store school-admin with hyphen for consistency
       await addDoc(collection(db, "users", "usersData", "login"), {
         email: formData.email,
-        role: formData.role.toLowerCase(), // Store as lowercase for consistency
+        role: formData.role === "School Admin" ? "school-admin" : formData.role.toLowerCase(),
         name: formData.name,
         uid: authUser.user.uid,
         createdAt: new Date()
@@ -292,6 +385,8 @@ const CreateUser = () => {
         subjects: [],
         grades: [],
         department: [],
+        schoolName: "",
+        schoolCode: "",
       });
       
       setActiveStep(0);
@@ -369,64 +464,39 @@ const CreateUser = () => {
         return (
           <Grid container spacing={3}>
             <Grid item xs={12}>
-              <TextField
-                name="name"
-                label="Full Name"
-                value={formData.name}
-                onChange={handleChange}
-                required
-                fullWidth
-                variant="outlined"
-                disabled={loading}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <PersonIcon sx={{ color: "#011E41" }} />
-                    </InputAdornment>
-                  ),
-                }}
-              />
+              {renderRTLTextField(
+                "name",
+                "Full Name",
+                formData.name,
+                handleChange,
+                true,
+                <PersonIcon sx={{ color: "#011E41" }} />
+              )}
             </Grid>
             <Grid item xs={12}>
-              <TextField
-                name="email"
-                label="Email Address"
-                type="email"
-                value={formData.email}
-                onChange={handleChange}
-                required
-                fullWidth
-                variant="outlined"
-                disabled={loading}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <EmailIcon sx={{ color: "#011E41" }} />
-                    </InputAdornment>
-                  ),
-                }}
-              />
+              {renderRTLTextField(
+                "email",
+                "Email Address",
+                formData.email,
+                handleChange,
+                true,
+                <EmailIcon sx={{ color: "#011E41" }} />,
+                "email"
+              )}
             </Grid>
             <Grid item xs={12}>
-              <TextField
-                name="password"
-                label="Password"
-                type="password"
-                value={formData.password}
-                onChange={handleChange}
-                required
-                fullWidth
-                variant="outlined"
-                disabled={loading}
-                helperText="Password must be at least 6 characters"
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <LockIcon sx={{ color: "#011E41" }} />
-                    </InputAdornment>
-                  ),
-                }}
-              />
+              {renderRTLTextField(
+                "password",
+                "Password",
+                formData.password,
+                handleChange,
+                true,
+                <LockIcon sx={{ color: "#011E41" }} />,
+                "password",
+                false,
+                1,
+                "Password must be at least 6 characters"
+              )}
             </Grid>
             <Grid item xs={12}>
               <FormControl fullWidth required>
@@ -443,6 +513,7 @@ const CreateUser = () => {
                   }
                 >
                   <MenuItem value="Admin">Admin</MenuItem>
+                  <MenuItem value="School Admin">School Admin</MenuItem>
                   <MenuItem value="Teacher">Teacher</MenuItem>
                 </Select>
               </FormControl>
@@ -479,6 +550,90 @@ const CreateUser = () => {
                 Admin users have full access to the system
               </Alert>
             </Box>
+          );
+        } else if (formData.role === "School Admin") {
+          // School Admin form fields
+          return (
+            <Grid container spacing={3}>
+              <Grid item xs={12}>
+                <Typography variant="h6" sx={{ mb: 2, color: "#011E41" }}>
+                  School Admin Information
+                </Typography>
+                <Alert severity="info" sx={{ mb: 3 }}>
+                  School Admins can manage teachers, students, and questions for their school
+                </Alert>
+              </Grid>
+              
+              <Grid item xs={12}>
+                {renderRTLTextField(
+                  "schoolName",
+                  "School Name",
+                  formData.schoolName,
+                  handleChange,
+                  true,
+                  <SchoolIcon sx={{ color: "#011E41" }} />
+                )}
+              </Grid>
+              
+              <Grid item xs={12}>
+                {renderRTLTextField(
+                  "schoolCode",
+                  "School Code",
+                  formData.schoolCode,
+                  handleChange,
+                  true,
+                  null,
+                  "text",
+                  false,
+                  1,
+                  "Unique code for your school"
+                )}
+              </Grid>
+              
+              {/* School Admin preview card */}
+              {formData.schoolName && formData.schoolCode && (
+                <Grid item xs={12}>
+                  <Card variant="outlined" sx={{ mt: 2, borderRadius: 2 }}>
+                    <CardContent>
+                      <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+                        <Avatar sx={{ bgcolor: "#011E41", mr: 2 }}>
+                          {getInitials(formData.name)}
+                        </Avatar>
+                        <Box>
+                          <Typography variant="h6">{formData.name}</Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            {formData.email}
+                          </Typography>
+                          <Chip 
+                            label="School Admin" 
+                            size="small" 
+                            sx={{ mt: 1, bgcolor: "#e8f5e9", color: "#2e7d32" }}
+                          />
+                        </Box>
+                      </Box>
+                      
+                      <Divider sx={{ my: 1.5 }} />
+                      
+                      <Typography variant="body2" sx={{ mb: 1 }}>
+                        <SchoolIcon 
+                          fontSize="small" 
+                          sx={{ verticalAlign: "middle", mr: 1, color: "#0277bd" }} 
+                        />
+                        <strong>School:</strong> {formData.schoolName}
+                      </Typography>
+                      
+                      <Typography variant="body2">
+                        <DepartmentIcon 
+                          fontSize="small" 
+                          sx={{ verticalAlign: "middle", mr: 1, color: "#e65100" }} 
+                        />
+                        <strong>School Code:</strong> {formData.schoolCode}
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              )}
+            </Grid>
           );
         }
         

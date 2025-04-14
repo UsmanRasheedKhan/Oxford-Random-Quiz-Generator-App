@@ -17,6 +17,7 @@ import ViewEditBook from "./components/teacher/ViewEditBook";
 import ApprovalRequests from "./components/admin/ApprovalRequests";
 import UserAccounts from "./components/admin/UserAccounts";
 import ViewQuiz from "./components/teacher/ViewQuiz";
+import Dashboard from "./components/school-admin/Dashboard";
 
 const App = () => {
   return (
@@ -41,6 +42,9 @@ const App = () => {
       <Route path="/teacher/generate-quiz" element={<GenerateQuiz />} />
       <Route path="/teacher/view-books" element={<ViewEditBook />} />
       <Route path="/teacher/view-quiz" element={<ViewQuiz />} />
+
+      {/* School Admin Routes*/}
+      <Route path="/school-admin" element={<Dashboard />} />
 
     </Routes>
   );

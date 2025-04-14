@@ -28,7 +28,6 @@ import DashboardIcon from '@mui/icons-material/Dashboard';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 
 // Utility function to detect if text contains Urdu
-/* 
 const isUrduText = (text) => {
   if (!text) return false;
   
@@ -46,7 +45,6 @@ const isUrduText = (text) => {
   // If more than 30% of characters are Urdu, consider it Urdu text
   return urduCharCount / text.length > 0.3;
 };
-*/
 
 const ViewEditBook = () => {
   // Add navigate function
