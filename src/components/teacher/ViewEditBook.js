@@ -535,111 +535,146 @@ const ViewEditBook = () => {
     }
   };
 
-  // Update the saveQuestionEdit function
-  const saveQuestionEdit = async (question, chapterId, topicId) => {
-    if (!editText.trim()) {
-      setError("Question text cannot be empty");
-      return;
-    }
+  // Update the saveQuestionEdit function to send edited questions back for approval
+const saveQuestionEdit = async (question, chapterId, topicId) => {
+  if (!editText.trim()) {
+    setError("Question text cannot be empty");
+    return;
+  }
+  
+  // Validate type-specific fields
+  if (question.type === "multiple" && editQuestionOptions.some(opt => !opt.trim())) {
+    setError("All options must be filled");
+    return;
+  }
+  
+  if (question.type === "short" && !editQuestionShortAnswer.trim()) {
+    setError("Short answer cannot be empty");
+    return;
+  }
+  
+  try {
+    setLoading(true);
     
-    // Validate type-specific fields
-    if (question.type === "multiple" && editQuestionOptions.some(opt => !opt.trim())) {
-      setError("All options must be filled");
-      return;
-    }
+    const formattedGrade = selectedGrade.replace(/ /g, "_");
+    const questionRef = doc(
+      db,
+      "books",
+      selectedDepartment,
+      "grades",
+      formattedGrade,
+      "books",
+      selectedBook,
+      "chapters",
+      chapterId,
+      "topics",
+      topicId,
+      "questions",
+      question.id
+    );
     
-    if (question.type === "short" && !editQuestionShortAnswer.trim()) {
-      setError("Short answer cannot be empty");
-      return;
-    }
+    // Check if the text contains Urdu
+    const isQuestionUrdu = isUrduText(editText);
     
-    try {
-      setLoading(true);
-      
-      const formattedGrade = selectedGrade.replace(/ /g, "_");
-      const questionRef = doc(
-        db,
-        "books",
-        selectedDepartment,
-        "grades",
-        formattedGrade,
-        "books",
-        selectedBook,
-        "chapters",
-        chapterId,
-        "topics",
-        topicId,
-        "questions",
-        question.id
-      );
-      
-      // Create update object with question text
-      const updateData = {
-        text: editText,
-        lastEdited: serverTimestamp(),
-        editedBy: currentUser.uid
-      };
-      
-      // Add type-specific updates
-      if (question.type === "multiple") {
-        updateData.options = editQuestionOptions;
-        updateData.correctOption = editQuestionCorrectOption;
-      } else if (question.type === "short") {
-        updateData.shortAnswer = editQuestionShortAnswer;
-      } else if (question.type === "truefalse") {
-        updateData.isTrueAnswer = editQuestionIsTrueAnswer;
+    // Create update object with question text
+    const updateData = {
+      text: editText,
+      lastEdited: serverTimestamp(),
+      editedBy: currentUser.uid,
+      status: "pending", // Changed to pending for re-approval
+      author: currentUser.email, // Track who made the edit
+    };
+    
+    // Add type-specific updates
+    if (question.type === "multiple") {
+      updateData.options = editQuestionOptions;
+      updateData.correctOption = editQuestionCorrectOption;
+    } else if (question.type === "short") {
+      updateData.shortAnswer = editQuestionShortAnswer;
+    } else if (question.type === "truefalse") {
+      updateData.isTrueAnswer = editQuestionIsTrueAnswer;
+      // For Urdu questions, store proper Urdu true/false values
+      if (isQuestionUrdu) {
+        updateData.trueText = "صحیح";
+        updateData.falseText = "غلط";
+      } else {
+        updateData.trueText = "True";
+        updateData.falseText = "False";
       }
-      
-      // Update in Firestore
-      await updateDoc(questionRef, updateData);
-      
-      // Update local state
-      setBookStructure(prevStructure => ({
-        ...prevStructure,
-        chapters: prevStructure.chapters.map(chapter => {
-          if (chapter.id === chapterId) {
-            return {
-              ...chapter,
-              topics: chapter.topics.map(topic => {
-                if (topic.id === topicId) {
-                  return {
-                    ...topic,
-                    questions: topic.questions.map(q => 
-                      q.id === question.id ? { 
-                        ...q, 
-                        text: editText,
-                        ...question.type === "multiple" ? { 
-                          options: editQuestionOptions, 
-                          correctOption: editQuestionCorrectOption 
-                        } : question.type === "short" ? { 
-                          shortAnswer: editQuestionShortAnswer 
-                        } : { 
-                          isTrueAnswer: editQuestionIsTrueAnswer 
-                        }
-                      } : q
-                    )
-                  };
-                }
-                return topic;
-              })
-            };
-          }
-          return chapter;
-        })
-      }));
-      
-      setSuccess("Question updated successfully");
-      setEditingQuestion(null);
-      setEditText("");
-      setLoading(false);
-      
-      setTimeout(() => setSuccess(null), 3000);
-    } catch (error) {
-      console.error("Error updating question:", error);
-      setError("Failed to update question: " + error.message);
-      setLoading(false);
     }
-  };
+    
+    // Update in Firestore
+    await updateDoc(questionRef, updateData);
+    
+    // Create a pending approval entry
+    const pendingQuestion = {
+      ...question,
+      ...updateData,
+      originalQuestionId: question.id,
+      path: questionRef.path,
+      chapterName: bookStructure.chapters.find(c => c.id === chapterId).name,
+      topicName: bookStructure.chapters.find(c => c.id === chapterId).topics.find(t => t.id === topicId).name,
+      bookId: selectedBook,
+      chapterId: chapterId,
+      topicId: topicId,
+      department: selectedDepartment,
+      grade: selectedGrade,
+      createdAt: serverTimestamp() // Timestamp for approval sorting
+    };
+    
+    // Add to pending questions collection for admin approval
+    await addDoc(collection(db, "pendingQuestions"), pendingQuestion);
+    
+    // Update local state to show as pending
+    setBookStructure(prevStructure => ({
+      ...prevStructure,
+      chapters: prevStructure.chapters.map(chapter => {
+        if (chapter.id === chapterId) {
+          return {
+            ...chapter,
+            topics: chapter.topics.map(topic => {
+              if (topic.id === topicId) {
+                return {
+                  ...topic,
+                  questions: topic.questions.map(q => 
+                    q.id === question.id ? { 
+                      ...q, 
+                      text: editText,
+                      status: "pending",
+                      ...question.type === "multiple" ? { 
+                        options: editQuestionOptions, 
+                        correctOption: editQuestionCorrectOption 
+                      } : question.type === "short" ? { 
+                        shortAnswer: editQuestionShortAnswer 
+                      } : { 
+                        isTrueAnswer: editQuestionIsTrueAnswer,
+                        trueText: isQuestionUrdu ? "صحیح" : "True",
+                        falseText: isQuestionUrdu ? "غلط" : "False"
+                      }
+                    } : q
+                  )
+                };
+              }
+              return topic;
+            })
+          };
+        }
+        return chapter;
+      })
+    }));
+    
+    setSuccess("Question updated and sent for approval");
+    setEditingQuestion(null);
+    setEditText("");
+    setLoading(false);
+    
+    setTimeout(() => setSuccess(null), 3000);
+  } catch (error) {
+    console.error("Error updating question:", error);
+    setError("Failed to update question: " + error.message);
+    setLoading(false);
+  }
+};
 
   // Handle cancel editing
   const cancelEditing = () => {
@@ -1217,32 +1252,52 @@ const addNewQuestion = async (chapterId, topicId) => {
                                             size="small"
                                             autoFocus
                                             sx={{ mb: 2 }}
+                                            InputProps={{
+                                              style: {
+                                                direction: isUrduText(editText) ? 'rtl' : 'ltr',
+                                                textAlign: isUrduText(editText) ? 'right' : 'left',
+                                                fontFamily: isUrduText(editText) ? 'Noto Nastaliq Urdu, Arial' : 'inherit',
+                                                fontSize: isUrduText(editText) ? '1.1rem' : 'inherit'
+                                              }
+                                            }}
                                           />
                                           
                                           {question.type === "multiple" && (
                                             <Box sx={{ mb: 2 }}>
                                               <Typography variant="subtitle2" sx={{ mb: 1 }}>Options:</Typography>
-                                              {editQuestionOptions.map((option, index) => (
-                                                <Box key={index} sx={{ display: 'flex', mb: 1, alignItems: 'center' }}>
-                                                  <Radio
-                                                    checked={editQuestionCorrectOption === index}
-                                                    onChange={() => setEditQuestionCorrectOption(index)}
-                                                    size="small"
-                                                  />
-                                                  <TextField
-                                                    fullWidth
-                                                    label={`Option ${index + 1}${editQuestionCorrectOption === index ? ' (Correct)' : ''}`}
-                                                    value={option}
-                                                    onChange={(e) => {
-                                                      const newOptions = [...editQuestionOptions];
-                                                      newOptions[index] = e.target.value;
-                                                      setEditQuestionOptions(newOptions);
-                                                    }}
-                                                    variant="outlined"
-                                                    size="small"
-                                                  />
-                                                </Box>
-                                              ))}
+                                              {editQuestionOptions.map((option, index) => {
+                                                const isOptionUrdu = isUrduText(option);
+                                                
+                                                return (
+                                                  <Box key={index} sx={{ display: 'flex', mb: 1, alignItems: 'center' }}>
+                                                    <Radio
+                                                      checked={editQuestionCorrectOption === index}
+                                                      onChange={() => setEditQuestionCorrectOption(index)}
+                                                      size="small"
+                                                    />
+                                                    <TextField
+                                                      fullWidth
+                                                      label={`Option ${index + 1}${editQuestionCorrectOption === index ? ' (Correct)' : ''}`}
+                                                      value={option}
+                                                      onChange={(e) => {
+                                                        const newOptions = [...editQuestionOptions];
+                                                        newOptions[index] = e.target.value;
+                                                        setEditQuestionOptions(newOptions);
+                                                      }}
+                                                      variant="outlined"
+                                                      size="small"
+                                                      InputProps={{
+                                                        style: {
+                                                          direction: isOptionUrdu ? 'rtl' : 'ltr',
+                                                          textAlign: isOptionUrdu ? 'right' : 'left',
+                                                          fontFamily: isOptionUrdu ? 'Noto Nastaliq Urdu, Arial' : 'inherit',
+                                                          fontSize: isOptionUrdu ? '1.1rem' : 'inherit'
+                                                        }
+                                                      }}
+                                                    />
+                                                  </Box>
+                                                );
+                                              })}
                                             </Box>
                                           )}
                                           
@@ -1255,6 +1310,14 @@ const addNewQuestion = async (chapterId, topicId) => {
                                               variant="outlined"
                                               size="small"
                                               sx={{ mb: 2 }}
+                                              InputProps={{
+                                                style: {
+                                                  direction: isUrduText(editQuestionShortAnswer) ? 'rtl' : 'ltr',
+                                                  textAlign: isUrduText(editQuestionShortAnswer) ? 'right' : 'left',
+                                                  fontFamily: isUrduText(editQuestionShortAnswer) ? 'Noto Nastaliq Urdu, Arial' : 'inherit',
+                                                  fontSize: isUrduText(editQuestionShortAnswer) ? '1.1rem' : 'inherit'
+                                                }
+                                              }}
                                             />
                                           )}
                                           
@@ -1266,8 +1329,16 @@ const addNewQuestion = async (chapterId, topicId) => {
                                                 value={editQuestionIsTrueAnswer ? "true" : "false"} 
                                                 onChange={(e) => setEditQuestionIsTrueAnswer(e.target.value === "true")}
                                               >
-                                                <FormControlLabel value="true" control={<Radio />} label="True" />
-                                                <FormControlLabel value="false" control={<Radio />} label="False" />
+                                                <FormControlLabel 
+                                                  value="true" 
+                                                  control={<Radio />} 
+                                                  label={isUrduText(editText) ? "صحیح" : "True"} 
+                                                />
+                                                <FormControlLabel 
+                                                  value="false" 
+                                                  control={<Radio />} 
+                                                  label={isUrduText(editText) ? "غلط" : "False"} 
+                                                />
                                               </RadioGroup>
                                             </FormControl>
                                           )}
@@ -1290,7 +1361,15 @@ const addNewQuestion = async (chapterId, topicId) => {
                                           </Box>
                                         </Box>
                                       ) : (
-                                        <Typography variant="body1">
+                                        <Typography 
+                                          variant="body1" 
+                                          sx={{ 
+                                            direction: isUrduText(question.text) ? 'rtl' : 'ltr',
+                                            textAlign: isUrduText(question.text) ? 'right' : 'left',
+                                            fontFamily: isUrduText(question.text) ? 'Noto Nastaliq Urdu, Arial' : 'inherit',
+                                            fontSize: isUrduText(question.text) ? '1.1rem' : 'inherit'
+                                          }}
+                                        >
                                           {question.text}
                                         </Typography>
                                       )}
@@ -1305,7 +1384,8 @@ const addNewQuestion = async (chapterId, topicId) => {
                                                   variant="body2" 
                                                   sx={{ 
                                                     fontWeight: question.correctOption === index ? 'bold' : 'normal',
-                                                    color: question.correctOption === index ? 'success.main' : 'text.primary'
+                                                    color: question.correctOption === index ? 'success.main' : 'text.primary',
+                                                    direction: isUrduText(option) ? 'rtl' : 'ltr'
                                                   }}
                                                 >
                                                   {index + 1}. {option} {question.correctOption === index && " (Correct)"}
@@ -1319,7 +1399,7 @@ const addNewQuestion = async (chapterId, topicId) => {
                                       {question.type === "short" && (
                                         <Box sx={{ ml: 2, mt: 1 }}>
                                           <Typography variant="caption" color="text.secondary">
-                                            Correct Answer: <span style={{ fontWeight: 'bold' }}>{question.shortAnswer}</span>
+                                            Correct Answer: <span style={{ fontWeight: 'bold', direction: isUrduText(question.shortAnswer) ? 'rtl' : 'ltr' }}>{question.shortAnswer}</span>
                                           </Typography>
                                         </Box>
                                       )}
@@ -1327,7 +1407,7 @@ const addNewQuestion = async (chapterId, topicId) => {
                                       {question.type === "truefalse" && (
                                         <Box sx={{ ml: 2, mt: 1 }}>
                                           <Typography variant="caption" color="text.secondary">
-                                            Correct Answer: <span style={{ fontWeight: 'bold' }}>{question.isTrueAnswer ? "True" : "False"}</span>
+                                            Correct Answer: <span style={{ fontWeight: 'bold' }}>{question.isTrueAnswer ? (isUrduText(question.text) ? "صحیح" : "True") : (isUrduText(question.text) ? "غلط" : "False")}</span>
                                           </Typography>
                                         </Box>
                                       )}

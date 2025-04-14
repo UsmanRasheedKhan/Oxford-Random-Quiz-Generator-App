@@ -60,7 +60,7 @@ import {
   Check as ApproveIcon, // Add ApproveIcon as alias for Check
 } from '@mui/icons-material';
 import { db } from '../../firebase';
-import { collection, query, where, getDocs, doc, updateDoc, getDoc, writeBatch, collectionGroup, setDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, updateDoc, getDoc, writeBatch, collectionGroup, setDoc, deleteDoc } from 'firebase/firestore';
 
 const ApprovalRequests = () => {
   const navigate = useNavigate();
@@ -680,6 +680,71 @@ const ApprovalRequests = () => {
     }
   };
 
+  // Add this function to handle question deletion
+  const handleDeleteOne = async (questionId) => {
+    const questionToDelete = questions.find(q => q.id === questionId);
+    if (!questionToDelete || !questionToDelete.path) {
+      setError("Cannot find question path for deletion");
+      return;
+    }
+    
+    try {
+      // Get the document reference from the full path
+      const questionRef = doc(db, questionToDelete.path);
+      
+      await deleteDoc(questionRef);
+      
+      // Update local state
+      setQuestions(questions.filter(q => q.id !== questionId));
+      setSelectedQuestions(selectedQuestions.filter(id => id !== questionId));
+      
+    } catch (err) {
+      console.error("Error deleting question:", err);
+      setError("Failed to delete question: " + err.message);
+    }
+  };
+
+  // Add this function to handle batch deletion of selected questions
+  const handleDeleteSelected = async () => {
+    if (selectedQuestions.length === 0) {
+      setError("No questions selected for deletion");
+      return;
+    }
+    
+    if (!window.confirm(`Are you sure you want to delete ${selectedQuestions.length} selected questions? This action cannot be undone.`)) {
+      return;
+    }
+    
+    setApproveLoading(true);
+    try {
+      const batch = writeBatch(db);
+      
+      for (const questionId of selectedQuestions) {
+        const questionToDelete = questions.find(q => q.id === questionId);
+        if (questionToDelete && questionToDelete.path) {
+          const questionRef = doc(db, questionToDelete.path);
+          batch.delete(questionRef);
+        }
+      }
+      
+      await batch.commit();
+      
+      // Update local state
+      setQuestions(questions.filter(q => !selectedQuestions.includes(q.id)));
+      setSelectedQuestions([]);
+      setSelectAll(false);
+      
+      // Show success message
+      setError("Selected questions have been deleted successfully");
+      
+    } catch (err) {
+      console.error("Error batch deleting questions:", err);
+      setError("Failed to delete questions: " + err.message);
+    } finally {
+      setApproveLoading(false);
+    }
+  };
+
   // Update question card display with RTL support for Urdu text
   const QuestionCard = ({ question, onApprove, onReject }) => {
     const isQuestionUrdu = isUrduText(question.text);
@@ -1002,6 +1067,16 @@ const ApprovalRequests = () => {
                     >
                       Approve Selected
                     </Button>
+                    <Button
+                      variant="contained"
+                      color="error"
+                      startIcon={<DeleteIcon />}
+                      onClick={handleDeleteSelected}
+                      disabled={selectedQuestions.length === 0 || approveLoading}
+                      sx={{ ml: 2 }}
+                    >
+                      Delete Selected
+                    </Button>
                   </Box>
                 </Box>
                 
@@ -1206,23 +1281,43 @@ const ApprovalRequests = () => {
                   p: 2, 
                   borderBottom: '1px solid #e0e0e0',
                   display: 'flex',
-                  alignItems: 'center'
+                  alignItems: 'center',
+                  justifyContent: 'space-between'
                 }}>
-                  <Box sx={{ 
-                    width: 32, 
-                    height: 32, 
-                    borderRadius: '50%', 
-                    bgcolor: '#e3f2fd', 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    justifyContent: 'center',
-                    mr: 1.5
-                  }}>
-                    <Typography variant="subtitle2" sx={{ color: '#1976d2', fontWeight: 'bold' }}>Q</Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <Box sx={{ 
+                      width: 32, 
+                      height: 32, 
+                      borderRadius: '50%', 
+                      bgcolor: '#e3f2fd', 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      justifyContent: 'center',
+                      mr: 1.5
+                    }}>
+                      <Typography variant="subtitle2" sx={{ color: '#1976d2', fontWeight: 'bold' }}>Q</Typography>
+                    </Box>
+                    <Typography variant="subtitle1" fontWeight="bold" color="primary">
+                      Question Text
+                    </Typography>
                   </Box>
-                  <Typography variant="subtitle1" fontWeight="bold" color="primary">
-                    Question Text
-                  </Typography>
+                  
+                  {/* Add delete button in header */}
+                  <Button
+                    variant="outlined"
+                    color="error"
+                    size="small"
+                    startIcon={<DeleteIcon />}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (window.confirm("Are you sure you want to delete this question? This action cannot be undone.")) {
+                        handleDeleteOne(currentQuestion.id);
+                        setDetailDialog(false);
+                      }
+                    }}
+                  >
+                    Delete Question
+                  </Button>
                 </Box>
                 
                 {/* Question Content - Now editable with RTL support */}

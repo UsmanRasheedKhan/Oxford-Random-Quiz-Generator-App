@@ -923,118 +923,144 @@ const parseCSVFile = async () => {
 
   try {
     const fileContent = await bulkUploadFile.text();
-    // Use a better CSV parsing approach to handle commas within quoted text
+    console.log("CSV file loaded, size:", fileContent.length);
+    
+    // Simple CSV parsing logic - split by lines first, then by commas
+    const lines = fileContent.split(/\r?\n/);
     const rows = [];
-    let inQuotes = false;
-    let currentRow = [];
-    let currentField = '';
     
-    for (let i = 0; i < fileContent.length; i++) {
-      const char = fileContent[i];
+    lines.forEach(line => {
+      // Skip empty lines
+      if (!line.trim()) return;
       
-      if (char === '"') {
-        inQuotes = !inQuotes;
-        continue;
+      // Split by commas, handling quoted content
+      let fields = [];
+      let field = '';
+      let inQuotes = false;
+      
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        
+        if (char === '"') {
+          inQuotes = !inQuotes;
+        } else if (char === ',' && !inQuotes) {
+          fields.push(field.trim());
+          field = '';
+        } else {
+          field += char;
+        }
       }
       
-      if (char === ',' && !inQuotes) {
-        currentRow.push(currentField.trim());
-        currentField = '';
-        continue;
-      }
-      
-      if (char === '\n' && !inQuotes) {
-        currentRow.push(currentField.trim());
-        rows.push(currentRow);
-        currentRow = [];
-        currentField = '';
-        continue;
-      }
-      
-      currentField += char;
-    }
+      // Add the last field
+      fields.push(field.trim());
+      rows.push(fields);
+    });
     
-    // Handle the last field and row
-    if (currentField) {
-      currentRow.push(currentField.trim());
-      if (currentRow.length > 0) {
-        rows.push(currentRow);
-      }
-    }
-
-    // Validate the header row
-    const headers = rows[0];
-    const expectedHeaders = [
-      "Question Text",
-      "Type",
-      "Option 1",
-      "Option 2",
-      "Option 3",
-      "Option 4",
-      "Correct Option Index",
-      "Short Answer",
-      "Blank Answer",
-      "True/False Answer",
-      "Short Answer Type"
-    ];
-
-    if (!headers || headers.length < 8) {
-      setBulkUploadError("Invalid CSV format. Please ensure the file has the correct headers and data format.");
+    console.log(`Parsed ${rows.length} rows from CSV`);
+    
+    if (rows.length === 0) {
+      setBulkUploadError("No data found in the file.");
       return;
     }
 
     // Skip the header row and parse the questions
-    const parsedQuestions = rows.slice(1).map((row) => {
-      // Get the basic question data
-      const questionType = row[1]?.trim().toLowerCase();
+    const parsedQuestions = rows.slice(1).map(row => {
+      if (!row || row.length < 2) return null;
       
-      // Create the question object based on type
+      // Basic question data
+      const questionType = (row[1] || "").trim().toLowerCase();
+      const questionText = (row[0] || "").trim();
+      
+      // If no text or type, skip this row
+      if (!questionText || !questionType) return null;
+      
+      // Parse difficulty from column 12 (index 11)
+      let difficulty = "Medium"; // Default value
+      if (row.length > 11 && row[11]) {
+        const diffValue = row[11].trim().toLowerCase();
+        console.log("Difficulty: ", diffValue);
+        if (diffValue === "easy") difficulty = "Easy";
+        else if (diffValue === "hard") difficulty = "Hard";
+        else if (diffValue === "medium") difficulty = "Medium";
+      }
+      
+      // Create question object based on type
       const question = {
-        text: row[0]?.trim(),
+        text: questionText,
         type: questionType,
+        difficulty: difficulty
       };
       
-      // Add type-specific data
+      // Type specific data
       if (questionType === "multiple") {
-        question.options = row.slice(2, 6).map(opt => opt?.trim() || ""); // Get all 4 options
-        question.correctOption = parseInt(row[6], 10) || 0; // Index of the correct option
-      } 
+        // Get options (columns 3-6)
+        question.options = [
+          row[2] ? row[2].trim() : "",
+          row[3] ? row[3].trim() : "",
+          row[4] ? row[4].trim() : "",
+          row[5] ? row[5].trim() : ""
+        ];
+        
+        // Get correct option index (column 7)
+        const correctIndex = parseInt(row[6], 10);
+        question.correctOption = isNaN(correctIndex) ? 0 : correctIndex;
+      }
       else if (questionType === "short") {
-        question.shortAnswer = row[7]?.trim() || "";
-        question.instructionType = row[10]?.trim() || "shortAnswer"; // Get the short answer type
+        // Get short answer (column 8)
+        question.shortAnswer = row[7] ? row[7].trim() : "";
+        
+        // Get instruction type (column 11)
+        question.instructionType = row[10] ? row[10].trim() : "shortAnswer";
       }
       else if (questionType === "fillinblanks") {
-        question.blankAnswer = row[8]?.trim() || "";
+        // Get blank answer (column 9)
+        question.blankAnswer = row[8] ? row[8].trim() : "";
       }
       else if (questionType === "truefalse") {
-        // Make sure to explicitly set to true or false, not undefined
-        const value = row[9]?.trim()?.toLowerCase() || "";
-        question.isTrueAnswer = value === "true" ? true : false;
+        // Get true/false answer (column 10)
+        const tfValue = row[9] ? row[9].trim().toLowerCase() : "";
+        question.isTrueAnswer = tfValue === "true";
       }
       
       return question;
-    });
-
-    // Filter out empty rows and validate
-    const validQuestions = parsedQuestions.filter((question) => {
-      if (!question.text) return false;
-      
-      // Type-specific validation
-      if (question.type === "multiple" && (!question.options || question.options.filter(Boolean).length < 2)) {
-        return false;
+    }).filter(q => q !== null); // Remove any null entries
+    
+    // Validate the questions
+    const validQuestions = parsedQuestions.filter(question => {
+      // Additional validation for each question type
+      if (question.type === "multiple") {
+        // Need at least 2 non-empty options
+        const nonEmptyOptions = question.options.filter(opt => opt.trim() !== "");
+        return nonEmptyOptions.length >= 2;
       }
-      if (question.type === "short" && !question.shortAnswer) {
-        return false;
+      else if (question.type === "short") {
+        return question.shortAnswer.trim() !== "";
       }
-      if (question.type === "fillinblanks" && !question.blankAnswer) {
-        return false;
+      else if (question.type === "fillinblanks") {
+        return question.blankAnswer.trim() !== "";
       }
       
       return true;
     });
-
+    
+    console.log(`Found ${validQuestions.length} valid questions`);
+    
+    if (validQuestions.length === 0) {
+      setBulkUploadError("No valid questions found in the file. Make sure the format is correct.");
+      return;
+    }
+    
+    // Log difficulties for verification
+    console.log("Questions with difficulties:", 
+      validQuestions.map(q => ({ 
+        text: q.text.substring(0, 20) + "...", 
+        type: q.type,
+        difficulty: q.difficulty 
+      }))
+    );
+    
     setBulkUploadQuestions(validQuestions);
-    setBulkUploadError(validQuestions.length === 0 ? "No valid questions found in the file." : "");
+    setBulkUploadError("");
   } catch (error) {
     console.error("Error parsing CSV file:", error);
     setBulkUploadError("Failed to parse the file. Please ensure it is in the correct format.");
@@ -1065,11 +1091,20 @@ const saveBulkQuestions = async () => {
       "questions"
     );
 
+    // Log each question as it's being processed
+    console.log("Processing bulk questions for database:", 
+      bulkUploadQuestions.map(q => ({
+        text: q.text.substring(0, 20),
+        difficulty: q.difficulty
+      }))
+    );
+
     bulkUploadQuestions.forEach((question) => {
-      // Create a base question object
+      // Create a base question object with difficulty explicitly included
       const questionData = {
         text: question.text,
         type: question.type,
+        difficulty: question.difficulty || "Medium", // Ensure difficulty is included
         author: currentUser.email,
         createdAt: new Date(),
         status: "pending",
@@ -1091,6 +1126,9 @@ const saveBulkQuestions = async () => {
         // Ensure isTrueAnswer is explicitly a boolean value
         questionData.isTrueAnswer = question.isTrueAnswer === true;
       }
+
+      // Log question data before saving
+      console.log("Saving question with difficulty:", questionData.difficulty);
 
       const newDocRef = doc(questionsRef);
       batch.set(newDocRef, questionData);
@@ -1975,7 +2013,7 @@ const saveBulkQuestions = async () => {
             Upload a CSV file with the following format:
           </Typography>
           <Typography variant="body2" sx={{ mb: 2, fontStyle: "italic" }}>
-            Question Text, Type (multiple/short/fillinblanks/truefalse), Option 1, Option 2, Option 3, Option 4, Correct Option Index (0-3), Short Answer, Blank Answer, True/False Answer, Short Answer Type
+            Question Text, Type (multiple/short/fillinblanks/truefalse), Option 1, Option 2, Option 3, Option 4, Correct Option Index (0-3), Short Answer, Blank Answer, True/False Answer, Short Answer Type, Difficulty
           </Typography>
           
           <Alert severity="info" sx={{ mb: 2 }}>
@@ -1988,6 +2026,7 @@ const saveBulkQuestions = async () => {
               <li>For <strong>fill in the blanks</strong> questions: fill columns 1-2 and 9 (type=fillinblanks)</li>
               <li>For <strong>true/false</strong> questions: fill columns 1-2 and 10 (type=truefalse)</li>
               <li>For <strong>Short Answer Type</strong> use: shortAnswer, oneWord, describe, jumbled, punctuation, scrambled, or other</li>
+              <li>For <strong>Difficulty</strong> use: Easy, Medium, Hard</li>
             </ul>
           </Alert>
           
@@ -1997,11 +2036,11 @@ const saveBulkQuestions = async () => {
             sx={{ mb: 2 }}
             onClick={() => {
               // Create a CSV template for download
-              const template = 'Question Text,Type,Option 1,Option 2,Option 3,Option 4,Correct Option Index,Short Answer,Blank Answer,True/False Answer,Short Answer Type\n' +
-                'Sample multiple choice question,multiple,Option A,Option B,Option C,Option D,0,,,,""\n' +
-                'Sample short answer question,short,,,,,,Answer goes here,,,"shortAnswer"\n' + 
-                'Sample fill in blanks question,fillinblanks,,,,,,,answer word,,""\n' + 
-                'Sample true/false question,truefalse,,,,,,,,true,""\n';
+              const template = 'Question Text,Type,Option 1,Option 2,Option 3,Option 4,Correct Option Index,Short Answer,Blank Answer,True/False Answer,Short Answer Type,Difficulty\n' +
+                'Sample multiple choice question,multiple,Option A,Option B,Option C,Option D,0,,,,"",Medium\n' +
+                'Sample short answer question,short,,,,,,Answer goes here,,,"shortAnswer",Medium\n' + 
+                'Sample fill in blanks question,fillinblanks,,,,,,,answer word,,"",Medium\n' + 
+                'Sample true/false question,truefalse,,,,,,,,true,"",Medium\n';
                 
               const blob = new Blob([template], { type: 'text/csv' });
               const url = URL.createObjectURL(blob);
